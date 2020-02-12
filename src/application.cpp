@@ -17,6 +17,7 @@ namespace po = boost::program_options;
 #include <iostream>
 #include <iterator>
 #include <unordered_map>
+#include "mock_database_connector.h"
 #include "requests.h"
 
 using namespace std;
@@ -27,9 +28,9 @@ po::variables_map config;
 void initConfig(int ac, char *av[]) {
     try {
         po::options_description desc("Allowed options");
-        desc.add_options()("help", "produce help message")
-        ("DB-Port", po::value<int>()->default_value(5555), "Database Port")
-        ("DB-IP", po::value<string>()->default_value("127.0.0.1"), "Database IP");
+        desc.add_options()("help", "produce help message")("DB-Port", po::value<int>()->default_value(5555),
+                                                           "Database Port")(
+            "DB-IP", po::value<string>()->default_value("127.0.0.1"), "Database IP");
 
         po::store(po::parse_command_line(ac, av, desc), config);
         po::notify(config);
@@ -47,51 +48,15 @@ void initConfig(int ac, char *av[]) {
     }
 }
 
-int connectToDB() {
-    int IP = inet_addr(config["DB-IP"].as<string>().c_str());  // INADDR_ANY;
-    int port = config["DB-Port"].as<int>();
-    struct sockaddr_in server, client;
-    int sd = socket(AF_INET, SOCK_STREAM, 0);
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = IP;
-    server.sin_port = htons(5555);
-
-    if (connect(sd, (struct sockaddr *)&server, sizeof(server)) < 0) {
-        perror("connect()");
-        exit(0);
-    }
-
-    return sd;
-}
-
-void insertToDB(int key, int value) {
-    int sd = connectToDB();
-    RequestType type = PUT;
-    write(sd, &type, sizeof(type));
-    PutRequest request = {.key = key, .value = value};
-    write(sd, &request, sizeof(request));
-    close(sd);
-}
-
-int getFromDB(int key) {
-    int sd = connectToDB();
-    RequestType type = GET;
-    write(sd, &type, sizeof(type));
-    GetRequest request = {.key = key};
-    write(sd, &request, sizeof(request));
-
-    GetResponse response;
-    read(sd, &response, sizeof(response));
-    close(sd);
-    return response.value;
-}
-
 int main(int ac, char *av[]) {
     initConfig(ac, av);
 
-    insertToDB(100, 123);
-    cout << getFromDB(100) << endl;
-    cout << getFromDB(101) << endl;
+    DatabaseConnectorInterface *DB =
+        new MockDatabaseConnector(config["DB-IP"].as<std::string>(), config["DB-Port"].as<int>());
+    
+    DB->put(3, 4);
+    std::cout << DB->get(3) << std::endl;
+    std::cout << DB->get(5) << std::endl;
 
     return 0;
 }
