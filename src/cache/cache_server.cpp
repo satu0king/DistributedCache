@@ -1,9 +1,3 @@
-
-
-#include <boost/program_options.hpp>
-namespace po = boost::program_options;
-
-#include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <pthread.h>
@@ -13,11 +7,19 @@ namespace po = boost::program_options;
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <iostream>
-#include <unordered_map>
-#include "requests.h"
 
-std::unordered_map<int, int> db;
+#include <boost/program_options.hpp>
+#include <iostream>
+
+#include "basic_data_connector.h"
+#include "cache/LRU_cache_policy.h"
+#include "cache/cache.h"
+#include "requests.h"
+namespace po = boost::program_options;
+
+po::variables_map config;
+Cache *cache;
+
 int sd;
 
 void killServer(int ret = EXIT_SUCCESS) {
@@ -34,43 +36,55 @@ void handle_my(int sig) {
     }
 }
 
-po::variables_map config;
-
 void initConfig(int ac, char *av[]) {
     try {
         po::options_description desc("Allowed options");
         auto init = desc.add_options();
         init("help", "produce help message");
-        init("size,s", po::value<int>()->default_value(0), "Initial seed size of the database");
-        init("key-range,r", po::value<int>()->default_value(1 << 20), "Maximum Key Value");
-        init("response-delay,d", po::value<int>()->default_value(50), "Reequest Delay in milliseconds");
+        init("cache-size,s", po::value<int>()->default_value(100),
+             "Cache Size");
+        init("replacement-policy,p",
+             po::value<std::string>()->default_value("LRU"),
+             "Cache Replacement Policy");
         init("db-port", po::value<int>()->default_value(5555), "Database Port");
+        init("db-ip", po::value<std::string>()->default_value("127.0.0.1"),
+             "Database IP");
+        init("cache-port", po::value<int>()->default_value(6666), "Cache Port");
+        init("response-delay,d", po::value<int>()->default_value(10),
+             "Reequest Delay in milliseconds");
 
         po::store(po::parse_command_line(ac, av, desc), config);
         po::notify(config);
 
         if (config.count("help")) {
             std::cout << desc << "\n";
-            killServer();
+            exit(0);
         }
     } catch (std::exception &e) {
         std::cerr << "error: " << e.what() << "\n";
-        killServer(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     } catch (...) {
         std::cerr << "Exception of unknown type!\n";
-        killServer(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 }
 
-void seedDB() {
-    int range = config["key-range"].as<int>();
-    int size = config["size"].as<int>();
-    while (size--) {
-        int r = rand() % range;
-        int v = rand();
-        db[r] = v;
-    }
-    std::cout << "Database Seeded with " << db.size() << " Key-Value Pairs" << std::endl;
+CachePolicyInterface *getCachePolicy() {
+    std::string policy = config["replacement-policy"].as<std::string>();
+    int size = config["cache-size"].as<int>();
+    if (policy == "LRU") return new LRUCachePolicy(size);
+
+    throw "Unknown Cache Policy: " + policy;
+}
+
+void initCache() {
+    std::string databaseIP = config["db-ip"].as<std::string>();
+    int databasePort = config["db-port"].as<int>();
+
+    DataConnectorInterface *database =
+        new BasicDataConnector(databaseIP, databasePort);
+    CachePolicyInterface *policy = getCachePolicy();
+    cache = new Cache(policy, database);
 }
 
 void *controller(void *_nsd) {
@@ -80,27 +94,22 @@ void *controller(void *_nsd) {
     read(nsd, &type, sizeof(type));
 
     int responseDelay = config["response-delay"].as<int>();
-
     if (type == GET) {
         GetRequest request;
         read(nsd, &request, sizeof(request));
         GetResponse response;
         response.key = request.key;
-        response.value = db.count(request.key) ? db[request.key] : -1;
+        response.value = cache->getEntry(request.key);
         usleep(responseDelay * 1000);
         write(nsd, &response, sizeof(response));
     } else if (type == PUT) {
         PutRequest request;
         read(nsd, &request, sizeof(request));
-        db[request.key] = request.value;
-    } else if (type == ERASE) {
-        EraseRequest request;
-        read(nsd, &request, sizeof(request));
-        db.erase(request.key);
-    } else if (type == RESET) {  
-        db.clear();
+        cache->insert(request.key, request.value);
+    } else if (type == RESET) {
+        cache->reset();
     } else {
-        std:: cout << "Unknown Request: "<< type << std::endl;
+        perror("Unknown Request");
     }
     close(nsd);
     return NULL;
@@ -115,7 +124,8 @@ void startServer() {
 
     sd = socket(AF_INET, SOCK_STREAM, 0);
 
-    int port = config["db-port"].as<int>();
+    int port = config["cache-port"].as<int>();
+
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = htonl(INADDR_ANY);
     server.sin_port = htons(port);
@@ -143,11 +153,8 @@ void startServer() {
     pthread_exit(NULL);
 }
 
-int main(int ac, char *av[]) {
-    initConfig(ac, av);
-    seedDB();
-
+int main(int argc, char **argv) {
+    initConfig(argc, argv);
+    initCache();
     startServer();
-
-    return 0;
 }

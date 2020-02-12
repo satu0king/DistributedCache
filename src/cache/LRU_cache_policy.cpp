@@ -42,10 +42,10 @@ void LRUCachePolicy::insert(int key, int value) {
 
     LRU_Queue.push_front(key);
     keyIteratorMap[key] = LRU_Queue.begin();
-
-    keyValueMap.erase(key);
-    LRU_Queue.erase(keyIteratorMap[key]);
-    keyIteratorMap.erase(key);
-
     keyValueMap[key] = value;
+}
+void LRUCachePolicy::reset() {
+    LRU_Queue.clear();
+    keyValueMap.clear();
+    keyIteratorMap.clear();
 }

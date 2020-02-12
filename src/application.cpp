@@ -1,23 +1,18 @@
-// Copyright Vladimir Prus 2002-2004.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt
-// or copy at http://www.boost.org/LICENSE_1_0.txt)
-
-/* The simplest usage of the library.
- */
 
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
-
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+
+#include <chrono>
 #include <iostream>
 #include <iterator>
 #include <unordered_map>
-#include "mock_database_connector.h"
+
+#include "basic_data_connector.h"
 #include "requests.h"
 
 using namespace std;
@@ -28,9 +23,14 @@ po::variables_map config;
 void initConfig(int ac, char *av[]) {
     try {
         po::options_description desc("Allowed options");
-        desc.add_options()("help", "produce help message")("DB-Port", po::value<int>()->default_value(5555),
-                                                           "Database Port")(
-            "DB-IP", po::value<string>()->default_value("127.0.0.1"), "Database IP");
+        auto it = desc.add_options();
+        it("help", "produce help message");
+        it("db-port", po::value<int>()->default_value(5555), "Database Port");
+        it("db-ip", po::value<string>()->default_value("127.0.0.1"),
+           "Database IP");
+        it("cache-port", po::value<int>()->default_value(6666), "Cache Port");
+        it("cache-ip", po::value<string>()->default_value("127.0.0.1"),
+           "Cache IP");
 
         po::store(po::parse_command_line(ac, av, desc), config);
         po::notify(config);
@@ -41,22 +41,82 @@ void initConfig(int ac, char *av[]) {
         }
     } catch (exception &e) {
         cerr << "error: " << e.what() << "\n";
-        exit(0);
+        exit(EXIT_FAILURE);
     } catch (...) {
         cerr << "Exception of unknown type!\n";
-        exit(0);
+        exit(EXIT_FAILURE);
     }
 }
 
 int main(int ac, char *av[]) {
     initConfig(ac, av);
 
-    DatabaseConnectorInterface *DB =
-        new MockDatabaseConnector(config["DB-IP"].as<std::string>(), config["DB-Port"].as<int>());
-    
-    DB->put(3, 4);
-    std::cout << DB->get(3) << std::endl;
-    std::cout << DB->get(5) << std::endl;
+    int db_port = config["db-port"].as<int>();
+    std::string db_ip = config["db-ip"].as<std::string>();
+
+    int cache_port = config["cache-port"].as<int>();
+    std::string cache_ip = config["cache-ip"].as<std::string>();
+
+    DataConnectorInterface *db = new BasicDataConnector(db_ip, db_port);
+    DataConnectorInterface *cache =
+        new BasicDataConnector(cache_ip, cache_port);
+
+    db->reset();
+    cache->reset();
+
+    int n = 1000;
+    std::cout << "Seeding Database" << std::endl;
+
+    for (int i = 0; i < n; i++) {
+        db->put(i, i);
+        if (i % 100 == 99) std::cout << i + 1<< std::endl;
+    }
+
+    vector<int> random(n);
+
+    for (int i = 0; i < 100; i++) {
+        random[i] = i;
+    }
+
+    float probability = 0.8;
+
+    int q = 1000;
+
+    using milli = std::chrono::milliseconds;
+
+    double totalTime = 0;
+
+    std::deque<int> queue;
+
+    std::cout << "Running Queries" << std::endl;
+
+    for (int i = 0; i < q; i++) {
+        int j = rand() % 100;
+
+        int p = rand() % 100;
+        if (p > probability * 100) {
+            random[j] = rand() % n;
+        }
+
+        auto start = std::chrono::high_resolution_clock::now();
+        cache->get(random[j]);
+        auto finish = std::chrono::high_resolution_clock::now();
+
+        auto time = std::chrono::duration_cast<milli>(finish - start).count();
+
+        queue.push_back(time);
+        totalTime += time;
+        if(queue.size() > 100) {
+            totalTime -= queue.front();
+            queue.pop_front();
+        }
+        
+
+        if(i%50 == 49)
+        std::cout << i + 1 << " - Average Query Time is "
+                  << totalTime / queue.size()
+                  << " milliseconds\n";
+    }
 
     return 0;
 }

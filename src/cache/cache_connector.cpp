@@ -1,4 +1,4 @@
-#include "mock_database_connector.h"
+#include "cache/cache_connector.h"
 #include "requests.h"
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -9,14 +9,14 @@
 #include <iterator>
 #include <unistd.h>
 
-int MockDatabaseConnector::getDBConnection() {
-    int IP = inet_addr(databaseIP.c_str());  // INADDR_ANY;
-    int port = databasePort;
+int CacheConnector::getCacheConnection() {
+    int IP = inet_addr(cacheIP.c_str());  // INADDR_ANY;
+    int port = cachePort;
     struct sockaddr_in server, client;
     int sd = socket(AF_INET, SOCK_STREAM, 0);
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = IP;
-    server.sin_port = htons(5555);
+    server.sin_port = htons(port);
 
     if (connect(sd, (struct sockaddr *)&server, sizeof(server)) < 0) {
         perror("connect()");
@@ -27,8 +27,8 @@ int MockDatabaseConnector::getDBConnection() {
 }
 
 
-int MockDatabaseConnector::get(int key) {
-    int sd = getDBConnection();
+int CacheConnector::get(int key) {
+    int sd = getCacheConnection();
     RequestType type = GET;
     write(sd, &type, sizeof(type));
     GetRequest request = {.key = key};
@@ -40,20 +40,11 @@ int MockDatabaseConnector::get(int key) {
     return response.value;
 }
 
-void MockDatabaseConnector::put(int key, int value) {
-    int sd = getDBConnection();
+void CacheConnector::put(int key, int value) {
+    int sd = getCacheConnection();
     RequestType type = PUT;
     write(sd, &type, sizeof(type));
     PutRequest request = {.key = key, .value = value};
-    write(sd, &request, sizeof(request));
-    close(sd);
-}
-
-void MockDatabaseConnector::erase(int key) {
-    int sd = getDBConnection();
-    RequestType type = ERASE;
-    write(sd, &type, sizeof(type));
-    EraseRequest request = {.key = key};
     write(sd, &request, sizeof(request));
     close(sd);
 }

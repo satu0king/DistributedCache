@@ -21,5 +21,6 @@ struct PutRequest {
 enum RequestType {
     GET,
     PUT,
-    ERASE
+    ERASE,
+    RESET
 };
