@@ -61,7 +61,7 @@ int main(int ac, char *av[]) {
     DataConnectorInterface *cache =
         new BasicDataConnector(cache_ip, cache_port);
 
-    db->reset();
+    // db->reset();
     cache->reset();
 
     int n = 1000;
@@ -93,8 +93,8 @@ int main(int ac, char *av[]) {
     for (int i = 0; i < q; i++) {
         int j = rand() % 100;
 
-        int p = rand() % 100;
-        if (p > probability * 100) {
+        int p = rand() % 10000;
+        if (p > probability * 10000) {
             random[j] = rand() % n;
         }
 
