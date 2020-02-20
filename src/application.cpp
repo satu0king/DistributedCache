@@ -60,7 +60,7 @@ int main(int ac, char *av[]) {
     DataConnectorInterface *db = new BasicDataConnector(db_ip, db_port);
     DataConnectorInterface *cache =
         new BasicDataConnector(cache_ip, cache_port);
-
+    
     // db->reset();
     cache->reset();
 

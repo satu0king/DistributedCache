@@ -17,9 +17,6 @@ int BasicDataConnector::getConnection() {
     server.sin_addr.s_addr = IP;
     server.sin_port = htons(port);
 
-    // std::cout << "Port:" << port << std::endl;
-    // std::cout << "IP:" << ip << std::endl;
-
     if (connect(sd, (struct sockaddr *)&server, sizeof(server)) < 0) {
         perror("connect()");
         exit(0);
