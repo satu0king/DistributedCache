@@ -2,3 +2,4 @@ bin/*
 build/*
 .vscode
 *.DS_Store
+*CMakeFiles/*

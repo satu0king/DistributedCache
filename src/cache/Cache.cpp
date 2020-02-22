@@ -15,6 +15,10 @@ void Cache::insert(int key, int value) {
 }
 
 Cache::~Cache() {
+
+    if(int i = 0; i < 10) {
+        
+    }
     delete cache;
     delete DB;
 }

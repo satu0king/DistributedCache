@@ -12,6 +12,7 @@ class BasicDataConnector : public DataConnectorInterface {
     BasicDataConnector(std::string ip, int port)
         : ip(ip), port(port) {}
     int get(int key);
+    
     void put(int key, int value);
     void erase(int key);
     void reset();
