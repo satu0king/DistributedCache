@@ -1,7 +1,7 @@
 #include <list>
 #include <unordered_map>
 
-#include "cache/cache_policy_interface.h"
+#include "cache_policy_interface.h"
 
 class LRUCachePolicy : public CachePolicyInterface {
     std::unordered_map<int, int> keyValueMap;

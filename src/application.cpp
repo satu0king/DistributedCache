@@ -13,6 +13,7 @@ namespace po = boost::program_options;
 #include <unordered_map>
 
 #include "basic_data_connector.h"
+#include "postgres_data_connector.h"
 #include "requests.h"
 
 using namespace std;
@@ -58,9 +59,10 @@ int main(int ac, char *av[]) {
     std::string cache_ip = config["cache-ip"].as<std::string>();
 
     DataConnectorInterface *db = new BasicDataConnector(db_ip, db_port);
+    // DataConnectorInterface *db = new PostgresDataConnector("mock_database");
     DataConnectorInterface *cache =
         new BasicDataConnector(cache_ip, cache_port);
-    
+
     // db->reset();
     cache->reset();
 
@@ -69,7 +71,7 @@ int main(int ac, char *av[]) {
 
     for (int i = 0; i < n; i++) {
         db->put(i, i);
-        if (i % 100 == 99) std::cout << i + 1<< std::endl;
+        if (i % 100 == 99) std::cout << i + 1 << std::endl;
     }
 
     vector<int> random(n);
@@ -99,23 +101,22 @@ int main(int ac, char *av[]) {
         }
 
         auto start = std::chrono::high_resolution_clock::now();
-        cache->get(random[j]);
+        int v = cache->get(random[j]);
+        assert(v == random[j]);
         auto finish = std::chrono::high_resolution_clock::now();
 
         auto time = std::chrono::duration_cast<milli>(finish - start).count();
 
         queue.push_back(time);
         totalTime += time;
-        if(queue.size() > 100) {
+        if (queue.size() > 100) {
             totalTime -= queue.front();
             queue.pop_front();
         }
-        
 
-        if(i%50 == 49)
-        std::cout << i + 1 << " - Average Query Time is "
-                  << totalTime / queue.size()
-                  << " milliseconds\n";
+        if (i % 50 == 49)
+            std::cout << i + 1 << " - Average Query Time is "
+                      << totalTime / queue.size() << " milliseconds\n";
     }
 
     return 0;

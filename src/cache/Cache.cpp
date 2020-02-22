@@ -1,4 +1,4 @@
-#include "cache/cache.h"
+#include "cache.h"
 
 bool Cache::hasEntry(int key) { return cache->hasEntry(key); }
 int Cache::getEntry(int key) {

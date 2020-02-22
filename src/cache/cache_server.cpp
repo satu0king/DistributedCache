@@ -11,9 +11,10 @@
 #include <boost/program_options.hpp>
 #include <iostream>
 
+#include "LRU_cache_policy.h"
 #include "basic_data_connector.h"
-#include "cache/LRU_cache_policy.h"
-#include "cache/cache.h"
+#include "cache.h"
+#include "postgres_data_connector.h"
 #include "requests.h"
 namespace po = boost::program_options;
 
@@ -81,8 +82,11 @@ void initCache() {
     std::string databaseIP = config["db-ip"].as<std::string>();
     int databasePort = config["db-port"].as<int>();
 
+    // DataConnectorInterface *database = new PostgresDataConnector("mock_database");
+
     DataConnectorInterface *database =
         new BasicDataConnector(databaseIP, databasePort);
+        
     CachePolicyInterface *policy = getCachePolicy();
     cache = new Cache(policy, database);
 }

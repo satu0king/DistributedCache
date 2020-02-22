@@ -1,6 +1,6 @@
 #pragma once 
 
-#include "cache/cache_policy_interface.h"
+#include "cache_policy_interface.h"
 #include "data_connector_interface.h"
 
 class Cache {

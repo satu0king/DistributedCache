@@ -1,4 +1,4 @@
-#include "cache/LRU_cache_policy.h"
+#include "LRU_cache_policy.h"
 
 void LRUCachePolicy::allocateSize(int size) {
     this->size = size;
