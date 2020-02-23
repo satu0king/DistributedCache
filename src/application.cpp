@@ -13,6 +13,7 @@ namespace po = boost::program_options;
 #include <unordered_map>
 
 #include "basic_data_connector.h"
+#include "data_connectors.h"
 #include "postgres_data_connector.h"
 #include "requests.h"
 
@@ -24,14 +25,21 @@ po::variables_map config;
 void initConfig(int ac, char *av[]) {
     try {
         po::options_description desc("Allowed options");
-        auto it = desc.add_options();
-        it("help", "produce help message");
-        it("db-port", po::value<int>()->default_value(5555), "Database Port");
-        it("db-ip", po::value<string>()->default_value("127.0.0.1"),
-           "Database IP");
-        it("cache-port", po::value<int>()->default_value(6666), "Cache Port");
-        it("cache-ip", po::value<string>()->default_value("127.0.0.1"),
-           "Cache IP");
+        auto init = desc.add_options();
+        init("help", "produce help message");
+        init("db-port", po::value<int>()->default_value(5555), "Database Port");
+        init("db-ip", po::value<string>()->default_value("127.0.0.1"),
+             "Database IP");
+        init("cache-port", po::value<int>()->default_value(6666), "Cache Port");
+        init("cache-ip", po::value<string>()->default_value("127.0.0.1"),
+             "Cache IP");
+        init("db-name",
+             po::value<std::string>()->default_value("mock_database"),
+             "Database Name");
+        init("data-source",
+             po::value<DataConnector>()->default_value(DataConnector::DEFAULT,
+                                                       "DEFAULT"),
+             "Database connector [DEFAULT | POSTGRES]");
 
         po::store(po::parse_command_line(ac, av, desc), config);
         po::notify(config);
@@ -49,6 +57,21 @@ void initConfig(int ac, char *av[]) {
     }
 }
 
+DataConnectorInterface *getDataConnector() {
+    DataConnector dataConnector = config["data-source"].as<DataConnector>();
+
+    if (dataConnector == DataConnector::DEFAULT) {
+        std::string databaseIP = config["db-ip"].as<std::string>();
+        int databasePort = config["db-port"].as<int>();
+        return new BasicDataConnector(databaseIP, databasePort);
+    } else if (dataConnector == DataConnector::POSTGRES) {
+        std::string databaseName = config["db-name"].as<std::string>();
+        return new PostgresDataConnector(databaseName);
+    }
+
+    throw std::runtime_error("Unknown CachePolicy");
+}
+
 int main(int ac, char *av[]) {
     initConfig(ac, av);
 
@@ -58,8 +81,8 @@ int main(int ac, char *av[]) {
     int cache_port = config["cache-port"].as<int>();
     std::string cache_ip = config["cache-ip"].as<std::string>();
 
-    DataConnectorInterface *db = new BasicDataConnector(db_ip, db_port);
-    // DataConnectorInterface *db = new PostgresDataConnector("mock_database");
+    // DataConnectorInterface *db = new BasicDataConnector(db_ip, db_port);
+    DataConnectorInterface *db = getDataConnector();
     DataConnectorInterface *cache =
         new BasicDataConnector(cache_ip, cache_port);
 

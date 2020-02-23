@@ -14,8 +14,11 @@
 #include "LRU_cache_policy.h"
 #include "basic_data_connector.h"
 #include "cache.h"
+#include "cache_policies.h"
+#include "data_connectors.h"
 #include "postgres_data_connector.h"
 #include "requests.h"
+
 namespace po = boost::program_options;
 
 po::variables_map config;
@@ -41,12 +44,20 @@ void initConfig(int ac, char *av[]) {
     try {
         po::options_description desc("Allowed options");
         auto init = desc.add_options();
+
         init("help", "produce help message");
         init("cache-size,s", po::value<int>()->default_value(100),
              "Cache Size");
         init("replacement-policy,p",
-             po::value<std::string>()->default_value("LRU"),
+             po::value<CachePolicy>()->default_value(CachePolicy::LRU, "LRU"),
              "Cache Replacement Policy");
+        init("data-source",
+             po::value<DataConnector>()->default_value(DataConnector::DEFAULT,
+                                                       "DEFAULT"),
+             "Database connector [DEFAULT | POSTGRES]");
+        init("db-name",
+             po::value<std::string>()->default_value("mock_database"),
+             "Database Name");
         init("db-port", po::value<int>()->default_value(5555), "Database Port");
         init("db-ip", po::value<std::string>()->default_value("127.0.0.1"),
              "Database IP");
@@ -71,22 +82,35 @@ void initConfig(int ac, char *av[]) {
 }
 
 CachePolicyInterface *getCachePolicy() {
-    std::string policy = config["replacement-policy"].as<std::string>();
+    CachePolicy policy = config["replacement-policy"].as<CachePolicy>();
     int size = config["cache-size"].as<int>();
-    if (policy == "LRU") return new LRUCachePolicy(size);
 
-    throw "Unknown Cache Policy: " + policy;
+    switch (policy) {
+        case CachePolicy::LRU:
+            return new LRUCachePolicy(size);
+    }
+
+    throw std::runtime_error("Unknown CachePolicy");
+}
+
+DataConnectorInterface *getDataConnector() {
+    DataConnector dataConnector = config["data-source"].as<DataConnector>();
+
+    if (dataConnector == DataConnector::DEFAULT) {
+        std::string databaseIP = config["db-ip"].as<std::string>();
+        int databasePort = config["db-port"].as<int>();
+        return new BasicDataConnector(databaseIP, databasePort);
+    } else if (dataConnector == DataConnector::POSTGRES) {
+        std::string databaseName = config["db-name"].as<std::string>();
+        return new PostgresDataConnector(databaseName);
+    }
+
+    throw std::runtime_error("Unknown CachePolicy");
 }
 
 void initCache() {
-    std::string databaseIP = config["db-ip"].as<std::string>();
-    int databasePort = config["db-port"].as<int>();
+    DataConnectorInterface *database = getDataConnector();
 
-    // DataConnectorInterface *database = new PostgresDataConnector("mock_database");
-
-    DataConnectorInterface *database =
-        new BasicDataConnector(databaseIP, databasePort);
-        
     CachePolicyInterface *policy = getCachePolicy();
     cache = new Cache(policy, database);
 }
