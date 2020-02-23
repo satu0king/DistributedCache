@@ -98,19 +98,18 @@ void *controller(void *_nsd) {
     read(nsd, &type, sizeof(type));
 
     int responseDelay = config["response-delay"].as<int>();
-    if (type == GET) {
+    if (type == RequestType::GET) {
         GetRequest request;
         read(nsd, &request, sizeof(request));
         GetResponse response;
-        response.key = request.key;
-        response.value = cache->getEntry(request.key);
+        response.value = cache->getEntry(request.container, request.key);
         usleep(responseDelay * 1000);
         write(nsd, &response, sizeof(response));
-    } else if (type == PUT) {
+    } else if (type == RequestType::PUT) {
         PutRequest request;
         read(nsd, &request, sizeof(request));
-        cache->insert(request.key, request.value);
-    } else if (type == RESET) {
+        cache->insert(request.container, request.key, request.value);
+    } else if (type == RequestType::RESET) {
         cache->reset();
     } else {
         perror("Unknown Request");

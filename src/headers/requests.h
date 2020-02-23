@@ -1,26 +1,34 @@
 #pragma once
 
 struct GetRequest {
+    char container[10];
     int key;
 };
 
+
+struct CreateRequest {
+    char container[10];
+};
+
 struct EraseRequest {
+    char container[10];
     int key;
 };
 
 struct GetResponse {
-    int key;
     int value;
 };
 
 struct PutRequest {
+    char container[10];
     int key;
     int value;
 };
 
-enum RequestType {
+enum class RequestType {
     GET,
     PUT,
     ERASE,
-    RESET
+    RESET,
+    CREATECONTAINER
 };

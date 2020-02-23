@@ -26,9 +26,21 @@ class PostgresDataConnector : public DataConnectorInterface {
           password(password) {
         getConnection();
     }
-    int get(int key);
-    void put(int key, int value);
-    void erase(int key);
+    int get(std::string container, int key);
+    void put(std::string container, int key, int value);
+    void erase(std::string container, int key);
+    void createContainer(std::string container);
     void reset();
     ~PostgresDataConnector();
 };
+
+/*
+
+create database mock_database;
+
+CREATE TABLE CONTAINER2(
+   KEY INT PRIMARY KEY     NOT NULL,
+   VALUE           INT    NOT NULL
+);
+
+*/

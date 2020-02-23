@@ -1,13 +1,16 @@
 #include "basic_data_connector.h"
-#include "requests.h"
+
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
+
 #include <iostream>
 #include <iterator>
-#include <unistd.h>
+
+#include "requests.h"
 
 int BasicDataConnector::getConnection() {
     int IP = inet_addr(ip.c_str());  // INADDR_ANY;
@@ -25,12 +28,12 @@ int BasicDataConnector::getConnection() {
     return sd;
 }
 
-
-int BasicDataConnector::get(int key) {
+int BasicDataConnector::get(std::string container, int key) {
     int sd = getConnection();
-    RequestType type = GET;
+    RequestType type = RequestType::GET;
     write(sd, &type, sizeof(type));
     GetRequest request = {.key = key};
+    strcpy(request.container, container.c_str());
     write(sd, &request, sizeof(request));
 
     GetResponse response;
@@ -41,26 +44,37 @@ int BasicDataConnector::get(int key) {
 
 void BasicDataConnector::reset() {
     int sd = getConnection();
-    RequestType type = RESET;
+    RequestType type = RequestType::RESET;
     write(sd, &type, sizeof(type));
     close(sd);
 }
 
-void BasicDataConnector::put(int key, int value) {
+void BasicDataConnector::put(std::string container, int key, int value) {
     int sd = getConnection();
-    RequestType type = PUT;
+    RequestType type = RequestType::PUT;
     write(sd, &type, sizeof(type));
     PutRequest request = {.key = key, .value = value};
+    strcpy(request.container, container.c_str());
     write(sd, &request, sizeof(request));
     close(sd);
 }
 
-void BasicDataConnector::erase(int key) {
+void BasicDataConnector::erase(std::string container, int key) {
     int sd = getConnection();
-    RequestType type = ERASE;
+    RequestType type = RequestType::ERASE;
     write(sd, &type, sizeof(type));
     EraseRequest request = {.key = key};
+    strcpy(request.container, container.c_str());
     write(sd, &request, sizeof(request));
     close(sd);
 }
 
+void BasicDataConnector::createContainer(std::string container) {
+     int sd = getConnection();
+    RequestType type = RequestType::CREATECONTAINER;
+    write(sd, &type, sizeof(type));
+    EraseRequest request;
+    strcpy(request.container, container.c_str());
+    write(sd, &request, sizeof(request));
+    close(sd);
+}

@@ -66,11 +66,13 @@ int main(int ac, char *av[]) {
     // db->reset();
     cache->reset();
 
+    std::string containerName = "CONTAINER1";
+
     int n = 1000;
     std::cout << "Seeding Database" << std::endl;
 
     for (int i = 0; i < n; i++) {
-        db->put(i, i);
+        db->put(containerName, i, i);
         if (i % 100 == 99) std::cout << i + 1 << std::endl;
     }
 
@@ -101,7 +103,7 @@ int main(int ac, char *av[]) {
         }
 
         auto start = std::chrono::high_resolution_clock::now();
-        int v = cache->get(random[j]);
+        int v = cache->get(containerName, random[j]);
         assert(v == random[j]);
         auto finish = std::chrono::high_resolution_clock::now();
 

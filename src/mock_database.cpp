@@ -13,11 +13,14 @@ namespace po = boost::program_options;
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <iostream>
 #include <unordered_map>
-#include "headers/requests.h"
 
-std::unordered_map<int, int> db;
+#include "headers/requests.h"
+#include "headers/types.h"
+
+std::map<key_pair_t, int> db;
 int sd;
 
 void killServer(int ret = EXIT_SUCCESS) {
@@ -41,9 +44,12 @@ void initConfig(int ac, char *av[]) {
         po::options_description desc("Allowed options");
         auto init = desc.add_options();
         init("help", "produce help message");
-        init("size,s", po::value<int>()->default_value(0), "Initial seed size of the database");
-        init("key-range,r", po::value<int>()->default_value(1 << 20), "Maximum Key Value");
-        init("response-delay,d", po::value<int>()->default_value(50), "Reequest Delay in milliseconds");
+        init("size,s", po::value<int>()->default_value(0),
+             "Initial seed size of the database");
+        init("key-range,r", po::value<int>()->default_value(1 << 20),
+             "Maximum Key Value");
+        init("response-delay,d", po::value<int>()->default_value(50),
+             "Reequest Delay in milliseconds");
         init("db-port", po::value<int>()->default_value(5555), "Database Port");
 
         po::store(po::parse_command_line(ac, av, desc), config);
@@ -68,9 +74,10 @@ void seedDB() {
     while (size--) {
         int r = rand() % range;
         int v = rand();
-        db[r] = v;
+        db[{"CONTAINER1", r}] = v;
     }
-    std::cout << "Database Seeded with " << db.size() << " Key-Value Pairs" << std::endl;
+    std::cout << "Database Seeded with " << db.size() << " Key-Value Pairs"
+              << std::endl;
 }
 
 void *controller(void *_nsd) {
@@ -81,26 +88,28 @@ void *controller(void *_nsd) {
 
     int responseDelay = config["response-delay"].as<int>();
 
-    if (type == GET) {
+    if (type == RequestType::GET) {
         GetRequest request;
         read(nsd, &request, sizeof(request));
+        auto key_pair = make_pair(std::string(request.container), request.key);
         GetResponse response;
-        response.key = request.key;
-        response.value = db.count(request.key) ? db[request.key] : -1;
+        response.value = db.count(key_pair) ? db[key_pair] : -1;
         usleep(responseDelay * 1000);
         write(nsd, &response, sizeof(response));
-    } else if (type == PUT) {
+    } else if (type == RequestType::PUT) {
         PutRequest request;
         read(nsd, &request, sizeof(request));
-        db[request.key] = request.value;
-    } else if (type == ERASE) {
+        auto key_pair = make_pair(std::string(request.container), request.key);
+        db[key_pair] = request.value;
+    } else if (type == RequestType::ERASE) {
         EraseRequest request;
         read(nsd, &request, sizeof(request));
-        db.erase(request.key);
-    } else if (type == RESET) {  
+        auto key_pair = make_pair(std::string(request.container), request.key);
+        db.erase(key_pair);
+    } else if (type == RequestType::RESET) {
         db.clear();
     } else {
-        std:: cout << "Unknown Request: "<< type << std::endl;
+        std::cout << "Unknown Request: " << static_cast<int>(type) << std::endl;
     }
     close(nsd);
     return NULL;

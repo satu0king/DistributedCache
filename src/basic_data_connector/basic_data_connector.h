@@ -9,11 +9,10 @@ class BasicDataConnector : public DataConnectorInterface {
     int getConnection();
 
    public:
-    BasicDataConnector(std::string ip, int port)
-        : ip(ip), port(port) {}
-    int get(int key);
-    
-    void put(int key, int value);
-    void erase(int key);
+    BasicDataConnector(std::string ip, int port) : ip(ip), port(port) {}
+    int get(std::string container, int key);
+    void put(std::string container, int key, int value);
+    void erase(std::string container, int key);
+    void createContainer(std::string container);
     void reset();
 };
