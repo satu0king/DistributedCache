@@ -9,5 +9,6 @@ class CachePolicyInterface {
     virtual void erase(std::string container, int key) = 0;
     virtual void reset() = 0;
     virtual void allocateSize(int size) = 0;
+    virtual int getSize() = 0;
     virtual ~CachePolicyInterface(){};
 };

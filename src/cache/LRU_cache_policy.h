@@ -17,5 +17,6 @@ class LRUCachePolicy : public CachePolicyInterface {
     void erase(std::string container, int key);
     void allocateSize(int size);
     void reset();
+    int getSize() { return size;}
     LRUCachePolicy(int size = 0) : size(size) {}
 };
