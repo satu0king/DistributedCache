@@ -94,8 +94,11 @@ int main(int ac, char *av[]) {
     int n = 1000;
     std::cout << "Seeding Database" << std::endl;
 
+    vector<int> values(n);
+
     for (int i = 0; i < n; i++) {
-        db->put(containerName, i, i);
+        values[i] = rand() % 1000000;
+        db->put(containerName, i, values[i]);
         if (i % 100 == 99) std::cout << i + 1 << std::endl;
     }
 
@@ -127,7 +130,7 @@ int main(int ac, char *av[]) {
 
         auto start = std::chrono::high_resolution_clock::now();
         int v = cache->get(containerName, random[j]);
-        assert(v == random[j]);
+        assert(v == values[random[j]]);
         auto finish = std::chrono::high_resolution_clock::now();
 
         auto time = std::chrono::duration_cast<milli>(finish - start).count();
