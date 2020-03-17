@@ -18,6 +18,7 @@
 #include "data_connectors.h"
 #include "membership.h"
 #include "postgres_data_connector.h"
+#include "member_node.h"
 #include "requests.h"
 
 namespace po = boost::program_options;

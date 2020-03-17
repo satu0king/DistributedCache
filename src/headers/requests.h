@@ -6,12 +6,12 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <string>
 
 struct GetRequest {
     char container[10];
     int key;
 };
-
 
 struct CreateRequest {
     char container[10];
@@ -32,14 +32,7 @@ struct PutRequest {
     int value;
 };
 
-enum class RequestType {
-    GET,
-    PUT,
-    ERASE,
-    RESET,
-    CREATECONTAINER,
-    GOSSIP
-};
+enum class RequestType { GET, PUT, ERASE, RESET, CREATECONTAINER, GOSSIP };
 
 struct Address {
     std::string ip;
@@ -52,12 +45,23 @@ struct Address {
         if (ip != other.ip) return ip < other.ip;
         return port < other.port;
     }
-    std::string toString() const {
-        return ip + ":" + std::to_string(port);
+    std::string toString() const { return ip + ":" + std::to_string(port); }
+
+    static int getConnection(Address addr) {
+        int IP = inet_addr(addr.ip.c_str());  // INADDR_ANY;
+        struct sockaddr_in server;
+        int sd = socket(AF_INET, SOCK_STREAM, 0);
+        server.sin_family = AF_INET;
+        server.sin_addr.s_addr = IP;
+        server.sin_port = htons(addr.port);
+
+        if (connect(sd, (struct sockaddr*)&server, sizeof(server)) < 0) {
+            return -1;
+        }
+
+        return sd;
     }
 };
-
-
 
 /* A simple routine calling UNIX write() in a loop */
 static ssize_t loop_write(int fd, const void* data, size_t size) {
@@ -73,7 +77,6 @@ static ssize_t loop_write(int fd, const void* data, size_t size) {
     return ret;
 }
 
-
 /* A simple routine calling UNIX read() in a loop */
 static ssize_t loop_read(int fd, void* data, size_t size) {
     ssize_t ret = 0;
@@ -87,3 +90,23 @@ static ssize_t loop_read(int fd, void* data, size_t size) {
     }
     return ret;
 }
+
+/*
+
+Hierarchy Structure. Each PayloadHeader is for a single artifact
+
+    GossipPayload
+        PayloadHeader
+            Buffer
+        PayloadHeader
+            Buffer
+*/
+
+struct GossipPayload {
+    int gossipArtifactCount;
+};
+
+struct PayloadHeader {
+    char type[20];
+    int size;  // (not including header size)
+};
