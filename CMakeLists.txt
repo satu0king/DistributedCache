@@ -27,8 +27,3 @@ target_link_libraries(cache_policy_lru_test PRIVATE cache Catch2::Catch2)
 
 add_executable(mock_database src/mock_database.cpp)
 target_link_libraries(mock_database PRIVATE Boost::program_options)
-
-
-
-add_executable(test_app src/TestCase.cpp)
-target_link_libraries(test_app PRIVATE Catch2::Catch2)

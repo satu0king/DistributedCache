@@ -16,29 +16,13 @@
 #include "cache.h"
 #include "cache_policies.h"
 #include "data_connectors.h"
+#include "membership.h"
 #include "postgres_data_connector.h"
 #include "requests.h"
 
 namespace po = boost::program_options;
 
 po::variables_map config;
-Cache *cache;
-
-int sd;
-
-void killServer(int ret = EXIT_SUCCESS) {
-    std::cout << "Shutting Down Server ...\n";
-    close(sd);
-    exit(ret);
-}
-
-void handle_my(int sig) {
-    switch (sig) {
-        case SIGINT:
-            killServer();
-            break;
-    }
-}
 
 void initConfig(int ac, char *av[]) {
     try {
@@ -62,6 +46,10 @@ void initConfig(int ac, char *av[]) {
         init("db-ip", po::value<std::string>()->default_value("127.0.0.1"),
              "Database IP");
         init("cache-port", po::value<int>()->default_value(6666), "Cache Port");
+        init("cache-ip", po::value<std::string>()->default_value("127.0.0.1"),
+             "Cache ip");
+        init("introducer-port", po::value<int>(), "introducer Port");
+        init("introducer-ip", po::value<std::string>(), "introducer ip");
         init("response-delay,d", po::value<int>()->default_value(10),
              "Reequest Delay in milliseconds");
 
@@ -108,33 +96,115 @@ DataConnectorInterface *getDataConnector() {
     throw std::runtime_error("Unknown CachePolicy");
 }
 
-void initCache() {
-    DataConnectorInterface *database = getDataConnector();
+void killServer(int ret);
 
-    CachePolicyInterface *policy = getCachePolicy();
-    cache = new Cache(policy, database);
-}
+void *controller(void *_nsd);
+
+class CacheServer {
+    DataConnectorInterface *database;
+    CachePolicyInterface *policy;
+    Cache *cache;
+
+    MemberNode *member;
+
+   public:
+    int sd;
+
+    Cache *getCache() { return cache; }
+    void initCache() {
+        DataConnectorInterface *database = getDataConnector();
+        CachePolicyInterface *policy = getCachePolicy();
+        cache = new Cache(policy, database);
+    }
+
+    void receiveGossip(int nsd) { member->receiveGossip(nsd); }
+
+    void start() {
+        socklen_t clientLen;
+        pthread_t threads;
+        struct sockaddr_in server, client;
+
+        sd = socket(AF_INET, SOCK_STREAM, 0);
+
+        int port = config["cache-port"].as<int>();
+        std::string ip = config["cache-ip"].as<std::string>();
+
+        server.sin_family = AF_INET;
+        server.sin_addr.s_addr = inet_addr(ip.c_str());
+        server.sin_port = htons(port);
+
+        if (bind(sd, (struct sockaddr *)&server, sizeof(server)) < 0) {
+            perror("bind failed");
+            killServer(EXIT_FAILURE);
+        }
+
+        member = new MemberNode(Address(ip, port));
+
+        if (config.count("introducer-ip") && config.count("introducer-port")) {
+            auto introducer_ip = config["introducer-ip"].as<std::string>();
+            auto introducer_port = config["introducer-port"].as<int>();
+            member->addIntroducer(introducer_ip, introducer_port);
+        }
+
+        listen(sd, 10);
+
+        printf("Waiting for the client...\n");
+
+        clientLen = sizeof(client);
+
+        // while(1){}
+        while (1) {
+            int nsd = accept(sd, (struct sockaddr *)&client, &clientLen);
+            int *socketDescriptor = new int(nsd);
+            pthread_t threads;
+            // controller(socketDescriptor);
+            if (pthread_create(&threads, NULL, controller,
+                               (void *)socketDescriptor) < 0) {
+                perror("pthread_create()");
+                killServer(EXIT_FAILURE);
+            }
+            usleep(10 * 1000);
+        }
+
+        pthread_exit(NULL);
+    }
+};
+
+CacheServer server;
 
 void *controller(void *_nsd) {
     int nsd = *((int *)_nsd);
     delete (int *)_nsd;
     RequestType type;
-    read(nsd, &type, sizeof(type));
+    int bytes_read = loop_read(nsd, &type, sizeof(type));
+    if (bytes_read != sizeof(type)) {
+        std::cout << bytes_read << std::endl;
+        perror("read()");
+    }
+    assert(bytes_read == sizeof(type));
+    if (type != RequestType::GOSSIP) {
+        std::cout << (int)type << std::endl;
+        assert(type == RequestType::GOSSIP);
+    }
 
     int responseDelay = config["response-delay"].as<int>();
     if (type == RequestType::GET) {
         GetRequest request;
         read(nsd, &request, sizeof(request));
         GetResponse response;
-        response.value = cache->getEntry(request.container, request.key);
+        response.value =
+            server.getCache()->getEntry(request.container, request.key);
         usleep(responseDelay * 1000);
         write(nsd, &response, sizeof(response));
     } else if (type == RequestType::PUT) {
         PutRequest request;
         read(nsd, &request, sizeof(request));
-        cache->insert(request.container, request.key, request.value);
+        server.getCache()->insert(request.container, request.key,
+                                  request.value);
     } else if (type == RequestType::RESET) {
-        cache->reset();
+        server.getCache()->reset();
+    } else if (type == RequestType::GOSSIP) {
+        server.receiveGossip(nsd);
     } else {
         perror("Unknown Request");
     }
@@ -142,46 +212,24 @@ void *controller(void *_nsd) {
     return NULL;
 }
 
-void startServer() {
-    int nsd;
-    signal(SIGINT, handle_my);
-    socklen_t clientLen;
-    pthread_t threads;
-    struct sockaddr_in server, client;
+void killServer(int ret = EXIT_SUCCESS) {
+    std::cout << "Shutting Down Server ...\n";
+    close(server.sd);
+    exit(ret);
+}
 
-    sd = socket(AF_INET, SOCK_STREAM, 0);
-
-    int port = config["cache-port"].as<int>();
-
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = htonl(INADDR_ANY);
-    server.sin_port = htons(port);
-
-    if (bind(sd, (struct sockaddr *)&server, sizeof(server)) < 0) {
-        perror("bind failed");
-        killServer(EXIT_FAILURE);
+void handle_my(int sig) {
+    switch (sig) {
+        case SIGINT:
+            killServer();
+            break;
     }
-
-    listen(sd, 5);
-
-    printf("Waiting for the client...\n");
-
-    clientLen = sizeof(client);
-
-    while (1) {
-        nsd = accept(sd, (struct sockaddr *)&client, &clientLen);
-        int *socketDescriptor = new int(nsd);
-        if (pthread_create(&threads, NULL, controller, socketDescriptor) < 0) {
-            perror("pthread_create()");
-            killServer(EXIT_FAILURE);
-        }
-    }
-
-    pthread_exit(NULL);
 }
 
 int main(int argc, char **argv) {
     initConfig(argc, argv);
-    initCache();
-    startServer();
+    signal(SIGINT, handle_my);
+
+    server.initCache();
+    server.start();
 }
