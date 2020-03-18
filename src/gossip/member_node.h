@@ -12,7 +12,7 @@
 #include "membership_list.h"
 
 #define HEARTBEAT_PERIOD 100
-#define GOSSIP_K 2
+#define GOSSIP_K 3
 
 class MemberNode {
     Member myMember;

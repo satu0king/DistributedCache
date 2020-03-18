@@ -16,10 +16,12 @@
 #include "cache.h"
 #include "cache_policies.h"
 #include "data_connectors.h"
+#include "member_node.h"
 #include "membership.h"
 #include "postgres_data_connector.h"
-#include "member_node.h"
 #include "requests.h"
+#include "server_interface.h"
+#include "server_thread_pool.h"
 
 namespace po = boost::program_options;
 
@@ -99,17 +101,54 @@ DataConnectorInterface *getDataConnector() {
 
 void killServer(int ret);
 
-void *controller(void *_nsd);
 
-class CacheServer {
+class CacheServer : public MultiThreadedServerInterface {
     DataConnectorInterface *database;
     CachePolicyInterface *policy;
     Cache *cache;
 
     MemberNode *member;
 
+    ServerThreadPool* pool;
+
    public:
     int sd;
+
+    void controller(int nsd) {
+        // usleep(20 * 1000);
+        RequestType type;
+        int bytes_read = loop_read(nsd, &type, sizeof(type));
+        if (bytes_read != sizeof(type)) {
+            std::cout << bytes_read << std::endl;
+            perror("read()");
+        }
+        assert(bytes_read == sizeof(type));
+        // if (type != RequestType::GOSSIP) {
+        //     std::cout << (int)type << std::endl;
+        //     assert(type == RequestType::GOSSIP);
+        // }
+
+        int responseDelay = config["response-delay"].as<int>();
+        if (type == RequestType::GET) {
+            GetRequest request;
+            read(nsd, &request, sizeof(request));
+            GetResponse response;
+            response.value =
+                getCache()->getEntry(request.container, request.key);
+            usleep(responseDelay * 1000);
+            write(nsd, &response, sizeof(response));
+        } else if (type == RequestType::PUT) {
+            PutRequest request;
+            read(nsd, &request, sizeof(request));
+            getCache()->insert(request.container, request.key, request.value);
+        } else if (type == RequestType::RESET) {
+            getCache()->reset();
+        } else if (type == RequestType::GOSSIP) {
+            member->receiveGossip(nsd);
+        } else {
+            perror("Unknown Request");
+        }
+    }
 
     Cache *getCache() { return cache; }
     void initCache() {
@@ -118,26 +157,13 @@ class CacheServer {
         cache = new Cache(policy, database);
     }
 
-    void receiveGossip(int nsd) { member->receiveGossip(nsd); }
 
     void start() {
-        socklen_t clientLen;
-        pthread_t threads;
-        struct sockaddr_in server, client;
-
-        sd = socket(AF_INET, SOCK_STREAM, 0);
-
+     
         int port = config["cache-port"].as<int>();
         std::string ip = config["cache-ip"].as<std::string>();
 
-        server.sin_family = AF_INET;
-        server.sin_addr.s_addr = inet_addr(ip.c_str());
-        server.sin_port = htons(port);
-
-        if (bind(sd, (struct sockaddr *)&server, sizeof(server)) < 0) {
-            perror("bind failed");
-            killServer(EXIT_FAILURE);
-        }
+        pool = new ServerThreadPool(this, ip, port);
 
         member = new MemberNode(Address(ip, port));
 
@@ -147,71 +173,12 @@ class CacheServer {
             member->addIntroducer(introducer_ip, introducer_port);
         }
 
-        listen(sd, 10);
-
         printf("Waiting for the client...\n");
-
-        clientLen = sizeof(client);
-
-        // while(1){}
-        while (1) {
-            int nsd = accept(sd, (struct sockaddr *)&client, &clientLen);
-            int *socketDescriptor = new int(nsd);
-            pthread_t threads;
-            // controller(socketDescriptor);
-            if (pthread_create(&threads, NULL, controller,
-                               (void *)socketDescriptor) < 0) {
-                perror("pthread_create()");
-                killServer(EXIT_FAILURE);
-            }
-            usleep(10 * 1000);
-        }
-
-        pthread_exit(NULL);
+        pool->start();
     }
 };
 
 CacheServer server;
-
-void *controller(void *_nsd) {
-    int nsd = *((int *)_nsd);
-    delete (int *)_nsd;
-    RequestType type;
-    int bytes_read = loop_read(nsd, &type, sizeof(type));
-    if (bytes_read != sizeof(type)) {
-        std::cout << bytes_read << std::endl;
-        perror("read()");
-    }
-    assert(bytes_read == sizeof(type));
-    if (type != RequestType::GOSSIP) {
-        std::cout << (int)type << std::endl;
-        assert(type == RequestType::GOSSIP);
-    }
-
-    int responseDelay = config["response-delay"].as<int>();
-    if (type == RequestType::GET) {
-        GetRequest request;
-        read(nsd, &request, sizeof(request));
-        GetResponse response;
-        response.value =
-            server.getCache()->getEntry(request.container, request.key);
-        usleep(responseDelay * 1000);
-        write(nsd, &response, sizeof(response));
-    } else if (type == RequestType::PUT) {
-        PutRequest request;
-        read(nsd, &request, sizeof(request));
-        server.getCache()->insert(request.container, request.key,
-                                  request.value);
-    } else if (type == RequestType::RESET) {
-        server.getCache()->reset();
-    } else if (type == RequestType::GOSSIP) {
-        server.receiveGossip(nsd);
-    } else {
-        perror("Unknown Request");
-    }
-    close(nsd);
-    return NULL;
-}
 
 void killServer(int ret = EXIT_SUCCESS) {
     std::cout << "Shutting Down Server ...\n";

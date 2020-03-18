@@ -6,8 +6,8 @@
 #include <iostream>
 #include "gossip_artifact.h"
 
-#define T_FAIL 4
-#define T_REMOVE 8
+#define T_FAIL 5
+#define T_REMOVE 10
 
 struct MemberSerialized {
     char ip[20];
