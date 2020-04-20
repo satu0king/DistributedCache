@@ -35,7 +35,7 @@ class ServerThreadPool {
 
    public:
     ServerThreadPool(MultiThreadedServerInterface* server, std::string ip,
-                     int port, int threadCount = 5, int queueCapacity = 10)
+                     int port, int threadCount = 1, int queueCapacity = 10)
         : ip(ip),
           port(port),
           threadCount(threadCount),
@@ -73,15 +73,18 @@ class ServerThreadPool {
             }
         }
 
-        listen(socketConnection, 10);
+        listen(socketConnection, 1000);
 
         while (1) {
             int nsd =
                 accept(socketConnection, (struct sockaddr*)&client, &clientLen);
             pthread_mutex_lock(&queueLock);
 
-            while (connectionQueue.size() >= queueCapacity)
+            while (connectionQueue.size() >= queueCapacity) {
+                std::cout << "Queue Full";
                 pthread_cond_wait(&c_prod, &queueLock);
+            }
+                
 
             connectionQueue.push(nsd);
             pthread_mutex_unlock(&queueLock);

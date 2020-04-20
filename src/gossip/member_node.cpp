@@ -51,8 +51,8 @@ void MemberNode::loop() {
 
     memberList.addMember(myMember);
 
-    std::cout << myMember.address.toString() << " : " << memberList.size()
-              << std::endl;
+    // std::cout << myMember.address.toString() << " : " << memberList.size()
+    //           << std::endl;
 
     std::vector<int> sendList = selectKItems(
         memberList.size(), std::min(GOSSIP_K, (int)memberList.size()));

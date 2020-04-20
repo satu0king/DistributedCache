@@ -32,6 +32,7 @@ int PostgresDataConnector::get(std::string container, int key) {
             container + " WHERE key =" + txn.quote(key));
         txn.commit();
         int value = r[0].as<int>();
+ 
         return value;
     } catch (const pqxx::unexpected_rows& exception) {
         txn.commit();

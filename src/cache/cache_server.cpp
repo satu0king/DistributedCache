@@ -121,6 +121,7 @@ class CacheServer : public MultiThreadedServerInterface {
         if (bytes_read != sizeof(type)) {
             std::cout << bytes_read << std::endl;
             perror("read()");
+            return;
         }
         assert(bytes_read == sizeof(type));
         // if (type != RequestType::GOSSIP) {
