@@ -1,30 +1,39 @@
 #pragma once
-#include "requests.h"
-#include "buffer.h"
-#include <string>
-#include <map>
 #include <iostream>
+#include <map>
+#include <string>
+
+#include "buffer.h"
 #include "gossip_artifact.h"
+#include "requests.h"
 
 #define T_FAIL 5
 #define T_REMOVE 10
+#define RING_SIZE 1021
 
 struct MemberSerialized {
     char ip[20];
     int port;
     long heartbeat;
+    int startRange;
 };
 
 struct Member {
     Address address;
     long heartbeat;
     long timestamp;
-    Member(std::string ip, int port, long heartbeat = 0)
-        : Member(Address(ip, port), heartbeat) {}
-    Member(Address address, long heartbeat = 0, long timestamp = 0)
-        : address(address), heartbeat(heartbeat), timestamp(timestamp) {}
+    int startRange;
+    Member(std::string ip, int port, int startRange = -1, long heartbeat = 0)
+        : Member(Address(ip, port), startRange, heartbeat) {}
+    Member(Address address, int startRange = -1, long heartbeat = 0,
+           long timestamp = 0)
+        : address(address),
+          heartbeat(heartbeat),
+          timestamp(timestamp),
+          startRange(startRange) {}
     Member(MemberSerialized data)
-        : Member(Address(data.ip, data.port), data.heartbeat) {}
+        : Member(Address(data.ip, data.port), data.startRange, data.heartbeat) {
+    }
     void update(const Member& other, long timestamp);
 
     Buffer serialize() const;
@@ -33,9 +42,11 @@ struct Member {
 class MembershipList : public GossipArtifact {
     std::map<Address, int> memberMap;
     std::vector<Member> memberList;
+    
     long timestamp;
 
    public:
+    std::map<int, Address> consistentRing;
     MembershipList();
     int getTimestamp();
     void updateTimestamp(long timestamp);
@@ -58,4 +69,6 @@ class MembershipList : public GossipArtifact {
     void deleteMember(Address& address);
 
     void deleteMember(Member& member);
+
+    Address getNearestNode(int key);
 };

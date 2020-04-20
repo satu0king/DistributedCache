@@ -27,7 +27,7 @@ class MemberNode {
 
     void addIntroducer(std::string ip, int port);
 
-    MemberNode(Address myAddress);
+    MemberNode(Address myAddress, int startRange = -1);
 
     void registerArtifact(GossipArtifact& artifact);
 

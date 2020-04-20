@@ -32,12 +32,12 @@ struct PutRequest {
     int value;
 };
 
-enum class RequestType { GET, PUT, ERASE, RESET, CREATECONTAINER, GOSSIP };
+enum class RequestType { GET, PUT, ERASE, RESET, CREATECONTAINER, GOSSIP, COORDINATE_GET, COORDINATE_PUT };
 
 struct Address {
     std::string ip;
     int port;
-    Address(const std::string ip, const int port) : ip(ip), port(port){};
+    Address(const std::string ip = "invalid", const int port = -1) : ip(ip), port(port){};
     bool operator==(const Address& other) {
         return ip == other.ip && port == other.port;
     }

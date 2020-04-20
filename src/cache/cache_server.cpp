@@ -49,6 +49,7 @@ void initConfig(int ac, char *av[]) {
         init("db-ip", po::value<std::string>()->default_value("127.0.0.1"),
              "Database IP");
         init("cache-port", po::value<int>()->default_value(6666), "Cache Port");
+        init("ring-start-range", po::value<int>()->default_value(-1), "Consistent Hashing ring Range");
         init("cache-ip", po::value<std::string>()->default_value("127.0.0.1"),
              "Cache ip");
         init("introducer-port", po::value<int>(), "introducer Port");
@@ -126,6 +127,7 @@ class CacheServer : public MultiThreadedServerInterface {
         assert(bytes_read == sizeof(type));
 
         int responseDelay = config["response-delay"].as<int>();
+        
         if (type == RequestType::GET) {
             GetRequest request;
             read(nsd, &request, sizeof(request));
@@ -159,10 +161,11 @@ class CacheServer : public MultiThreadedServerInterface {
      
         int port = config["cache-port"].as<int>();
         std::string ip = config["cache-ip"].as<std::string>();
+        int startRange = config["ring-start-range"].as<int>();
 
         pool = new ServerThreadPool(this, ip, port);
 
-        member = new MemberNode(Address(ip, port));
+        member = new MemberNode(Address(ip, port), startRange);
 
         if (config.count("introducer-ip") && config.count("introducer-port")) {
             auto introducer_ip = config["introducer-ip"].as<std::string>();

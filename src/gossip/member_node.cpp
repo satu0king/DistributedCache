@@ -30,7 +30,8 @@ Buffer MemberNode::generateGossipPayload() {
     return data;
 }
 
-MemberNode::MemberNode(Address myAddress) : myMember(myAddress) {
+MemberNode::MemberNode(Address myAddress, int startRange)
+    : myMember(myAddress, startRange) {
     memberList.addMember(myMember);
     registerArtifact(memberList);
     pthread_create(&tid, NULL, &memberloop, this);
