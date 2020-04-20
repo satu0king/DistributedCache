@@ -51,8 +51,8 @@ void MemberNode::loop() {
 
     memberList.addMember(myMember);
 
-    // std::cout << myMember.address.toString() << " : " << memberList.size()
-    //           << std::endl;
+    std::cout << myMember.address.toString() << " : " << memberList.size()
+              << std::endl;
 
     std::vector<int> sendList = selectKItems(
         memberList.size(), std::min(GOSSIP_K, (int)memberList.size()));
@@ -95,7 +95,6 @@ void MemberNode::receiveGossip(int connection) {
         gossipArtifacts[type]->update(data);
     }
     pthread_mutex_unlock(&lock);
-    close(connection);
 }
 
 std::vector<int> MemberNode::selectKItems(int n, int k) {
@@ -122,4 +121,3 @@ void* memberloop(void* ptr) {
 
     return NULL;
 }
-

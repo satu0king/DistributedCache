@@ -115,7 +115,7 @@ class CacheServer : public MultiThreadedServerInterface {
     int sd;
 
     void controller(int nsd) {
-        // usleep(20 * 1000);
+        
         RequestType type;
         int bytes_read = loop_read(nsd, &type, sizeof(type));
         if (bytes_read != sizeof(type)) {
@@ -124,10 +124,6 @@ class CacheServer : public MultiThreadedServerInterface {
             return;
         }
         assert(bytes_read == sizeof(type));
-        // if (type != RequestType::GOSSIP) {
-        //     std::cout << (int)type << std::endl;
-        //     assert(type == RequestType::GOSSIP);
-        // }
 
         int responseDelay = config["response-delay"].as<int>();
         if (type == RequestType::GET) {

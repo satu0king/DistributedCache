@@ -6,13 +6,13 @@
 #include <string>
 #include <unordered_map>
 
-#include "requests.h"
 #include "buffer.h"
 #include "gossip_artifact.h"
 #include "membership_list.h"
+#include "requests.h"
 
 #define HEARTBEAT_PERIOD 100
-#define GOSSIP_K 3
+#define GOSSIP_K 2
 
 class MemberNode {
     Member myMember;

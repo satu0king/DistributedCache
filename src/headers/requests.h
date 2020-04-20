@@ -56,6 +56,7 @@ struct Address {
         server.sin_port = htons(addr.port);
 
         if (connect(sd, (struct sockaddr*)&server, sizeof(server)) < 0) {
+            perror("connect failed: ");
             return -1;
         }
 
