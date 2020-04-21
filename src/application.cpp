@@ -74,20 +74,27 @@ DataConnectorInterface *getDataConnector() {
 
 int main(int ac, char *av[]) {
     initConfig(ac, av);
+    srand(time(NULL));
 
     int db_port = config["db-port"].as<int>();
     std::string db_ip = config["db-ip"].as<std::string>();
 
-    int cache_port = config["cache-port"].as<int>();
-    std::string cache_ip = config["cache-ip"].as<std::string>();
+    // int cache_port = config["cache-port"].as<int>();
+    // std::string cache_ip = config["cache-ip"].as<std::string>();
+    std::string cache_ip = "127.0.0.1";
 
     // DataConnectorInterface *db = new BasicDataConnector(db_ip, db_port);
     DataConnectorInterface *db = getDataConnector();
-    DataConnectorInterface *cache =
-        new BasicDataConnector(cache_ip, cache_port);
+    // DataConnectorInterface *cache =
+    //     new BasicDataConnector(cache_ip, cache_port);
+
+    std::vector<DataConnectorInterface *> caches;
+    caches.push_back(new BasicDataConnector(cache_ip, 6666));
+    // for (int port = 7001; port <= 7019; port++)
+    //     caches.push_back(new BasicDataConnector(cache_ip, port));
 
     // db->reset();
-    cache->reset();
+    for (auto cache : caches) cache->reset();
 
     std::string containerName = "CONTAINER1";
 
@@ -100,15 +107,16 @@ int main(int ac, char *av[]) {
         values[i] = rand() % 1000000;
         db->put(containerName, i, values[i]);
         if (i % 100 == 99) std::cout << i + 1 << std::endl;
+        // usleep(10 * 1000);
     }
 
     vector<int> random(n);
 
     for (int i = 0; i < 100; i++) {
-        random[i] = i;
+        random[i] = rand() % 1000;
     }
 
-    float probability = 0.8;
+    float probability = 0.5;
 
     int q = 1000;
 
@@ -129,7 +137,7 @@ int main(int ac, char *av[]) {
         }
 
         auto start = std::chrono::high_resolution_clock::now();
-        int v = cache->get(containerName, random[j]);
+        int v = caches[rand() % caches.size()]->get(containerName, random[j]);
         assert(v == values[random[j]]);
         auto finish = std::chrono::high_resolution_clock::now();
 

@@ -35,7 +35,7 @@ class ServerThreadPool {
 
    public:
     ServerThreadPool(MultiThreadedServerInterface* server, std::string ip,
-                     int port, int threadCount = 5, int queueCapacity = 10)
+                     int port, int threadCount = 10, int queueCapacity = 20)
         : ip(ip),
           port(port),
           threadCount(threadCount),
@@ -89,6 +89,11 @@ class ServerThreadPool {
             pthread_mutex_unlock(&queueLock);
             pthread_cond_signal(&c_cons);
         }
+    }
+
+    void stop() {
+        for(int i = 0; i < threadCount; i++)
+            pthread_cancel(threads[i]);
     }
 
     friend void* threadHandler(void* _pool);

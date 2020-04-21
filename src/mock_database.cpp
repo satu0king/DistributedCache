@@ -19,13 +19,80 @@ namespace po = boost::program_options;
 
 #include "headers/requests.h"
 #include "headers/types.h"
+#include "multithreaded_server/server_interface.h"
+#include "multithreaded_server/server_thread_pool.h"
 
-std::map<key_pair_t, int> db;
-int sd;
 
+po::variables_map config;
+
+class MockDatabase : public MultiThreadedServerInterface {
+    ServerThreadPool *pool;
+
+    std::map<key_pair_t, int> db;
+
+   public:
+    void seedDB() {
+        int range = config["key-range"].as<int>();
+        int size = config["size"].as<int>();
+        while (size--) {
+            int r = rand() % range;
+            int v = rand();
+            db[{"CONTAINER1", r}] = v;
+        }
+        std::cout << "Database Seeded with " << db.size() << " Key-Value Pairs"
+                  << std::endl;
+    }
+    void controller(int nsd) {
+        RequestType type;
+        read(nsd, &type, sizeof(type));
+
+        int responseDelay = config["response-delay"].as<int>();
+
+        if (type == RequestType::GET) {
+            GetRequest request;
+            read(nsd, &request, sizeof(request));
+            auto key_pair =
+                make_pair(std::string(request.container), request.key);
+            GetResponse response;
+            response.value = db.count(key_pair) ? db[key_pair] : -1;
+            usleep(responseDelay * 1000);
+            write(nsd, &response, sizeof(response));
+        } else if (type == RequestType::PUT) {
+            PutRequest request;
+            read(nsd, &request, sizeof(request));
+            auto key_pair =
+                make_pair(std::string(request.container), request.key);
+            db[key_pair] = request.value;
+        } else if (type == RequestType::ERASE) {
+            EraseRequest request;
+            read(nsd, &request, sizeof(request));
+            auto key_pair =
+                make_pair(std::string(request.container), request.key);
+            db.erase(key_pair);
+        } else if (type == RequestType::RESET) {
+            db.clear();
+        } else {
+            std::cout << "Unknown Request: " << static_cast<int>(type)
+                      << std::endl;
+        }
+    }
+
+    void start() {
+        int port = config["db-port"].as<int>();
+        std::string ip = config["db-ip"].as<std::string>();
+        pool = new ServerThreadPool(this, ip, port);
+        pool->start();
+    }
+
+    void kill() {
+        if (pool) pool->stop();
+    }
+};
+
+MockDatabase db;
 void killServer(int ret = EXIT_SUCCESS) {
     std::cout << "Shutting Down Server ...\n";
-    close(sd);
+    db.kill();
     exit(ret);
 }
 
@@ -37,7 +104,6 @@ void handle_my(int sig) {
     }
 }
 
-po::variables_map config;
 
 void initConfig(int ac, char *av[]) {
     try {
@@ -50,6 +116,8 @@ void initConfig(int ac, char *av[]) {
              "Maximum Key Value");
         init("response-delay,d", po::value<int>()->default_value(50),
              "Reequest Delay in milliseconds");
+        init("db-ip", po::value<std::string>()->default_value("127.0.0.1"),
+             "Database ip");
         init("db-port", po::value<int>()->default_value(5555), "Database Port");
 
         po::store(po::parse_command_line(ac, av, desc), config);
@@ -68,95 +136,15 @@ void initConfig(int ac, char *av[]) {
     }
 }
 
-void seedDB() {
-    int range = config["key-range"].as<int>();
-    int size = config["size"].as<int>();
-    while (size--) {
-        int r = rand() % range;
-        int v = rand();
-        db[{"CONTAINER1", r}] = v;
-    }
-    std::cout << "Database Seeded with " << db.size() << " Key-Value Pairs"
-              << std::endl;
-}
-
-void *controller(void *_nsd) {
-    int nsd = *((int *)_nsd);
-    delete (int *)_nsd;
-    RequestType type;
-    read(nsd, &type, sizeof(type));
-
-    int responseDelay = config["response-delay"].as<int>();
-
-    if (type == RequestType::GET) {
-        GetRequest request;
-        read(nsd, &request, sizeof(request));
-        auto key_pair = make_pair(std::string(request.container), request.key);
-        GetResponse response;
-        response.value = db.count(key_pair) ? db[key_pair] : -1;
-        usleep(responseDelay * 1000);
-        write(nsd, &response, sizeof(response));
-    } else if (type == RequestType::PUT) {
-        PutRequest request;
-        read(nsd, &request, sizeof(request));
-        auto key_pair = make_pair(std::string(request.container), request.key);
-        db[key_pair] = request.value;
-    } else if (type == RequestType::ERASE) {
-        EraseRequest request;
-        read(nsd, &request, sizeof(request));
-        auto key_pair = make_pair(std::string(request.container), request.key);
-        db.erase(key_pair);
-    } else if (type == RequestType::RESET) {
-        db.clear();
-    } else {
-        std::cout << "Unknown Request: " << static_cast<int>(type) << std::endl;
-    }
-    close(nsd);
-    return NULL;
-}
-
-void startServer() {
-    int nsd;
-    signal(SIGINT, handle_my);
-    socklen_t clientLen;
-    pthread_t threads;
-    struct sockaddr_in server, client;
-
-    sd = socket(AF_INET, SOCK_STREAM, 0);
-
-    int port = config["db-port"].as<int>();
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = htonl(INADDR_ANY);
-    server.sin_port = htons(port);
-
-    if (bind(sd, (struct sockaddr *)&server, sizeof(server)) < 0) {
-        perror("bind failed");
-        killServer(EXIT_FAILURE);
-    }
-
-    listen(sd, 5);
-
-    printf("Waiting for the client...\n");
-
-    clientLen = sizeof(client);
-
-    while (1) {
-        nsd = accept(sd, (struct sockaddr *)&client, &clientLen);
-        int *socketDescriptor = new int(nsd);
-        if (pthread_create(&threads, NULL, controller, socketDescriptor) < 0) {
-            perror("pthread_create()");
-            killServer(EXIT_FAILURE);
-        }
-    }
-
-    pthread_exit(NULL);
-}
 
 int main(int ac, char *av[]) {
     initConfig(ac, av);
-    seedDB();
+    signal(SIGINT, handle_my);
 
-    startServer();
+    MockDatabase db;
+    db.seedDB();
+
+    db.start();
 
     return 0;
 }

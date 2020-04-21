@@ -42,6 +42,9 @@ class MemberNode {
     void receiveGossip(int connection);
 
     std::vector<int> selectKItems(int n, int k);
+
+    Address getNearestNode(int key) { return memberList.getNearestNode(key); }
+    Address getAddress() { return myMember.address; }
 };
 
 void* memberloop(void* ptr);

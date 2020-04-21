@@ -49,7 +49,8 @@ void initConfig(int ac, char *av[]) {
         init("db-ip", po::value<std::string>()->default_value("127.0.0.1"),
              "Database IP");
         init("cache-port", po::value<int>()->default_value(6666), "Cache Port");
-        init("ring-start-range", po::value<int>()->default_value(-1), "Consistent Hashing ring Range");
+        init("ring-start-range", po::value<int>()->default_value(0),
+             "Consistent Hashing ring Range");
         init("cache-ip", po::value<std::string>()->default_value("127.0.0.1"),
              "Cache ip");
         init("introducer-port", po::value<int>(), "introducer Port");
@@ -102,7 +103,6 @@ DataConnectorInterface *getDataConnector() {
 
 void killServer(int ret);
 
-
 class CacheServer : public MultiThreadedServerInterface {
     DataConnectorInterface *database;
     CachePolicyInterface *policy;
@@ -110,35 +110,73 @@ class CacheServer : public MultiThreadedServerInterface {
 
     MemberNode *member;
 
-    ServerThreadPool* pool;
+    ServerThreadPool *pool;
 
    public:
-    int sd;
+   CacheServer():pool(NULL), member(NULL), cache(NULL) {}
 
     void controller(int nsd) {
-        
         RequestType type;
         int bytes_read = loop_read(nsd, &type, sizeof(type));
-        if (bytes_read != sizeof(type)) {
-            std::cout << bytes_read << std::endl;
-            perror("read()");
-            return;
-        }
+        // if (bytes_read != sizeof(type)) {
+        //     std::cout << bytes_read << std::endl;
+        //     perror("read()");
+        //     return;
+        // }
         assert(bytes_read == sizeof(type));
 
         int responseDelay = config["response-delay"].as<int>();
+
+        auto address = member->getAddress();
         
         if (type == RequestType::GET) {
             GetRequest request;
             read(nsd, &request, sizeof(request));
+            // std::cout << address.toString() << " GET " << request.key << std::endl;
+            Address targetNode = member->getNearestNode(
+                request.key);  // Get Target node from consistent ring
+
+            int connection = Address::getConnection(targetNode);
+            if (connection == -1) {
+                perror("Connection to Target Node Failed");
+                return;
+            }
+            RequestType type = RequestType::GET_TARGET;  // Forward request
+            loop_write(connection, &type, sizeof(type));
+            loop_write(connection, &request, sizeof(request));
+
+            GetResponse response;  // Get response
+            read(connection, &response, sizeof(response));
+            close(connection);
+
+            write(nsd, &response, sizeof(response));  // Return Response
+        } else if (type == RequestType::PUT) {
+            PutRequest request;
+            read(nsd, &request, sizeof(request));
+            Address targetNode = member->getNearestNode(request.key);
+            std::cout << address.toString() << " PUT " << request.key << " " << request.value << std::endl;
+            int connection = Address::getConnection(targetNode);
+            if (connection == -1) {
+                perror("Connection to Target Node Failed");
+                return;
+            }
+            RequestType type = RequestType::PUT_TARGET;
+            loop_write(connection, &type, sizeof(type));
+            loop_write(connection, &request, sizeof(request));
+            close(connection);
+        } else if (type == RequestType::GET_TARGET) {
+            GetRequest request;
+            read(nsd, &request, sizeof(request));
+            // std::cout << address.toString() << " GET_TARGET " << request.key << std::endl;
             GetResponse response;
             response.value =
                 getCache()->getEntry(request.container, request.key);
             usleep(responseDelay * 1000);
             write(nsd, &response, sizeof(response));
-        } else if (type == RequestType::PUT) {
+        } else if (type == RequestType::PUT_TARGET) {
             PutRequest request;
             read(nsd, &request, sizeof(request));
+            std::cout << address.toString() << " PUT_TARGET " << request.key << " " << request.value << std::endl;
             getCache()->insert(request.container, request.key, request.value);
         } else if (type == RequestType::RESET) {
             getCache()->reset();
@@ -156,9 +194,7 @@ class CacheServer : public MultiThreadedServerInterface {
         cache = new Cache(policy, database);
     }
 
-
     void start() {
-     
         int port = config["cache-port"].as<int>();
         std::string ip = config["cache-ip"].as<std::string>();
         int startRange = config["ring-start-range"].as<int>();
@@ -176,13 +212,18 @@ class CacheServer : public MultiThreadedServerInterface {
         printf("Waiting for the client...\n");
         pool->start();
     }
+
+    void kill() {
+        if(pool)
+            pool->stop();
+    }
 };
 
 CacheServer server;
 
 void killServer(int ret = EXIT_SUCCESS) {
     std::cout << "Shutting Down Server ...\n";
-    close(server.sd);
+    server.kill();
     exit(ret);
 }
 

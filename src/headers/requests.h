@@ -32,7 +32,7 @@ struct PutRequest {
     int value;
 };
 
-enum class RequestType { GET, PUT, ERASE, RESET, CREATECONTAINER, GOSSIP, COORDINATE_GET, COORDINATE_PUT };
+enum class RequestType { GET, PUT, ERASE, RESET, CREATECONTAINER, GOSSIP, GET_TARGET, PUT_TARGET };
 
 struct Address {
     std::string ip;
@@ -62,6 +62,7 @@ struct Address {
 
         return sd;
     }
+
 };
 
 /* A simple routine calling UNIX write() in a loop */

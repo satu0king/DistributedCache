@@ -104,12 +104,9 @@ Member& MembershipList::operator[](int i) { return memberList[i]; }
 void MembershipList::deleteMember(Address& address) {
     assert(hasMember(address));
 
-    std::cout << "Member Lost!" << std::endl;
-    std::cout << address.toString() << std::endl;
-
     int i = memberMap[address];
 
-    if(~memberList[i].startRange)
+    if (~memberList[i].startRange)
         consistentRing.erase(memberList[i].startRange);
 
     memberList[i] = memberList.back();
@@ -119,12 +116,15 @@ void MembershipList::deleteMember(Address& address) {
 
     memberMap.erase(address);
 
-            
+    std::cout << "Member Lost! - " << memberList.size() << std::endl;
+    std::cout << address.toString() << std::endl;
 }
 
 Address MembershipList::getNearestNode(int key) {
+    key = std::hash<std::string>()("def" + std::to_string(key) + "abc") %
+          RING_SIZE;
     assert(consistentRing.size() >= 1);
-    if(key > consistentRing.rbegin()->first)
+    if (key > consistentRing.rbegin()->first)
         return consistentRing.begin()->second;
     return consistentRing.lower_bound(key)->second;
 };
