@@ -43,7 +43,7 @@ class MemberNode {
 
     std::vector<int> selectKItems(int n, int k);
 
-    Address getNearestNode(int key) { return memberList.getNearestNode(key); }
+    Address getNearestNode(int key);
     Address getAddress() { return myMember.address; }
 };
 

@@ -46,20 +46,20 @@ void MemberNode::loop() {
 
     pthread_mutex_lock(&lock);
 
-    for (auto& [key, artifact] : gossipArtifacts) {
-        artifact->loop(timestamp);
-    }
+    for (auto& [key, artifact] : gossipArtifacts) artifact->loop(timestamp);
 
     memberList.addMember(myMember);
 
     // std::cout << myMember.address.toString() << " : " << memberList.size()
-    //           << std::endl;
+    //           << " " << heartbeat() << std::endl;
 
     std::vector<int> sendList = selectKItems(
         memberList.size(), std::min(GOSSIP_K, (int)memberList.size()));
     auto data = generateGossipPayload();
-    for (int i : sendList) sendMemberList(memberList[i], data);
     pthread_mutex_unlock(&lock);
+    // std::cout << "IN" << " " << timestamp << std::endl;
+    for (int i : sendList) sendMemberList(memberList[i], data);
+    // std::cout << "OUT" << std::endl;
 }
 
 int MemberNode::sendMemberList(Member& member, Buffer data) {
@@ -83,7 +83,6 @@ void MemberNode::receiveGossip(int connection) {
 
     int gossipArtifactCount = header.gossipArtifactCount;
 
-    pthread_mutex_lock(&lock);
     while (gossipArtifactCount--) {
         PayloadHeader header;
         read_bytes = loop_read(connection, &header, sizeof(header));
@@ -93,11 +92,19 @@ void MemberNode::receiveGossip(int connection) {
         Buffer data(header.size);
         read_bytes = loop_read(connection, data.data(), header.size);
         assert(read_bytes == header.size);
+
+        pthread_mutex_lock(&lock);
         gossipArtifacts[type]->update(data);
+        pthread_mutex_unlock(&lock);
     }
-    pthread_mutex_unlock(&lock);
 }
 
+Address MemberNode::getNearestNode(int key) {
+    pthread_mutex_lock(&lock);
+    auto v = memberList.getNearestNode(key);
+    pthread_mutex_unlock(&lock);
+    return v;
+}
 std::vector<int> MemberNode::selectKItems(int n, int k) {
     assert(n >= k);
     int i;

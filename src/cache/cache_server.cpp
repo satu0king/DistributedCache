@@ -113,7 +113,7 @@ class CacheServer : public MultiThreadedServerInterface {
     ServerThreadPool *pool;
 
    public:
-   CacheServer():pool(NULL), member(NULL), cache(NULL) {}
+    CacheServer() : pool(NULL), member(NULL), cache(NULL) {}
 
     void controller(int nsd) {
         RequestType type;
@@ -128,13 +128,23 @@ class CacheServer : public MultiThreadedServerInterface {
         int responseDelay = config["response-delay"].as<int>();
 
         auto address = member->getAddress();
-        
+
         if (type == RequestType::GET) {
             GetRequest request;
             read(nsd, &request, sizeof(request));
-            // std::cout << address.toString() << " GET " << request.key << std::endl;
+            // std::cout << address.toString() << " GET " << request.key <<
+            // std::endl;
             Address targetNode = member->getNearestNode(
                 request.key);  // Get Target node from consistent ring
+
+            if (targetNode == address) {
+                GetResponse response;
+                response.value =
+                    getCache()->getEntry(request.container, request.key);
+                usleep(responseDelay * 1000);
+                write(nsd, &response, sizeof(response));
+                return;
+            }
 
             int connection = Address::getConnection(targetNode);
             if (connection == -1) {
@@ -154,7 +164,8 @@ class CacheServer : public MultiThreadedServerInterface {
             PutRequest request;
             read(nsd, &request, sizeof(request));
             Address targetNode = member->getNearestNode(request.key);
-            std::cout << address.toString() << " PUT " << request.key << " " << request.value << std::endl;
+            std::cout << address.toString() << " PUT " << request.key << " "
+                      << request.value << std::endl;
             int connection = Address::getConnection(targetNode);
             if (connection == -1) {
                 perror("Connection to Target Node Failed");
@@ -167,7 +178,8 @@ class CacheServer : public MultiThreadedServerInterface {
         } else if (type == RequestType::GET_TARGET) {
             GetRequest request;
             read(nsd, &request, sizeof(request));
-            // std::cout << address.toString() << " GET_TARGET " << request.key << std::endl;
+            // std::cout << address.toString() << " GET_TARGET " << request.key
+            // << std::endl;
             GetResponse response;
             response.value =
                 getCache()->getEntry(request.container, request.key);
@@ -176,7 +188,8 @@ class CacheServer : public MultiThreadedServerInterface {
         } else if (type == RequestType::PUT_TARGET) {
             PutRequest request;
             read(nsd, &request, sizeof(request));
-            std::cout << address.toString() << " PUT_TARGET " << request.key << " " << request.value << std::endl;
+            std::cout << address.toString() << " PUT_TARGET " << request.key
+                      << " " << request.value << std::endl;
             getCache()->insert(request.container, request.key, request.value);
         } else if (type == RequestType::RESET) {
             getCache()->reset();
@@ -214,8 +227,7 @@ class CacheServer : public MultiThreadedServerInterface {
     }
 
     void kill() {
-        if(pool)
-            pool->stop();
+        if (pool) pool->stop();
     }
 };
 

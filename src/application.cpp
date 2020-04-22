@@ -10,6 +10,8 @@ namespace po = boost::program_options;
 #include <chrono>
 #include <iostream>
 #include <iterator>
+#include <queue>
+#include <thread>
 #include <unordered_map>
 
 #include "basic_data_connector.h"
@@ -72,6 +74,59 @@ DataConnectorInterface *getDataConnector() {
     throw std::runtime_error("Unknown CachePolicy");
 }
 
+template <typename T>
+class WorkerPool {
+    std::function<void(T)> executor;
+    std::queue<T> queue;
+    std::mutex queueLock;
+    std::vector<std::thread> threads;
+    int threadCount;
+
+   public:
+    WorkerPool(std::function<void(T)> executor, int threadCount = 0,
+               bool exitWhenDone = true)
+        : executor(executor), threadCount(threadCount) {}
+
+    void insert(T obj) {
+        std::lock_guard<std::mutex> guard(queueLock);
+        queue.push(obj);
+    }
+    void insert(std::vector<T> &objects) {
+        std::lock_guard<std::mutex> guard(queueLock);
+        for (auto &obj : objects) queue.push(obj);
+    }
+
+    void start(int c = 0) {
+        threadCount += c;
+
+        while (threadCount--)
+            threads.push_back(std::thread(&WorkerPool::threadRunner, this));
+    }
+
+    void threadRunner() {
+        while (1) {
+            T obj;
+            {
+                std::lock_guard<std::mutex> guard(queueLock);
+                // queueLock.lock();
+                if (queue.empty()) {
+                    return;
+                }
+                if (queue.size() % 100 == 0) std::cout << queue.size() << endl;
+                obj = queue.front();
+                queue.pop();
+                // queueLock.unlock();
+            }
+
+            executor(obj);
+        }
+    }
+
+    void join() {
+        for (auto &thread : threads) thread.join();
+    }
+};
+
 int main(int ac, char *av[]) {
     initConfig(ac, av);
     srand(time(NULL));
@@ -90,10 +145,11 @@ int main(int ac, char *av[]) {
 
     std::vector<DataConnectorInterface *> caches;
     caches.push_back(new BasicDataConnector(cache_ip, 6666));
-    // for (int port = 7001; port <= 7019; port++)
-    //     caches.push_back(new BasicDataConnector(cache_ip, port));
+    for (int port = 7001; port <= 7019; port++) {
+        // caches.push_back(new BasicDataConnector(cache_ip, port));
+    }
 
-    // db->reset();
+    db->reset();
     for (auto cache : caches) cache->reset();
 
     std::string containerName = "CONTAINER1";
@@ -103,30 +159,62 @@ int main(int ac, char *av[]) {
 
     vector<int> values(n);
 
+    using milli = std::chrono::milliseconds;
+
     for (int i = 0; i < n; i++) {
         values[i] = rand() % 1000000;
-        db->put(containerName, i, values[i]);
         if (i % 100 == 99) std::cout << i + 1 << std::endl;
-        // usleep(10 * 1000);
+        db->put(containerName, i, values[i]);
     }
 
-    vector<int> random(n);
-
-    for (int i = 0; i < 100; i++) {
-        random[i] = rand() % 1000;
-    }
+    std::cout << "Seeding Database Done" << std::endl;
 
     float probability = 0.5;
 
     int q = 1000;
 
-    using milli = std::chrono::milliseconds;
+    vector<int> random(100);
 
     double totalTime = 0;
 
     std::deque<int> queue;
 
     std::cout << "Running Queries" << std::endl;
+
+    for (int i = 0; i < 100; i++) {
+        random[i] = rand() % n;
+    }
+
+    for (int i = 0; i < q - 100; i++) {
+        int j = rand() % 100;
+        int p = rand() % 10000;
+        if (p > probability * 10000) {
+            random.push_back(rand() % n);
+        } else {
+            random.push_back(random[random.size() - j - 1]);
+        }
+    }
+
+    auto CacheTester = [&](int key) {
+        // std::cout << key << std::endl;
+        int v = caches[rand() % caches.size()]->get(containerName, key);
+        // if(v != values[key]) {
+        //     std::cout << v << std::endl;
+        //     std::cout << values[key] << std::endl;
+        // }
+        assert(v == values[key]);
+    };
+    WorkerPool<int> workerPool(CacheTester);
+    std::cout << random.size() << std::endl;
+    workerPool.insert(random);
+
+    auto start = std::chrono::high_resolution_clock::now();
+    workerPool.start(10);
+    workerPool.join();
+    auto finish = std::chrono::high_resolution_clock::now();
+
+    auto time = std::chrono::duration_cast<milli>(finish - start).count();
+    std::cout << "Total Time : " << time << std::endl;
 
     for (int i = 0; i < q; i++) {
         int j = rand() % 100;
@@ -137,8 +225,9 @@ int main(int ac, char *av[]) {
         }
 
         auto start = std::chrono::high_resolution_clock::now();
-        int v = caches[rand() % caches.size()]->get(containerName, random[j]);
-        assert(v == values[random[j]]);
+        int key = random[j];
+        int v = caches[rand() % caches.size()]->get(containerName, key);
+        assert(v == values[key]);
         auto finish = std::chrono::high_resolution_clock::now();
 
         auto time = std::chrono::duration_cast<milli>(finish - start).count();

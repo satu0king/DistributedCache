@@ -121,8 +121,8 @@ void MembershipList::deleteMember(Address& address) {
 }
 
 Address MembershipList::getNearestNode(int key) {
-    key = std::hash<std::string>()("def" + std::to_string(key) + "abc") %
-          RING_SIZE;
+    key = std::hash<std::string>()(std::to_string(key)) % RING_SIZE;
+    // key %= RING_SIZE;
     assert(consistentRing.size() >= 1);
     if (key > consistentRing.rbegin()->first)
         return consistentRing.begin()->second;

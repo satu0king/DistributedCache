@@ -29,6 +29,7 @@ class MockDatabase : public MultiThreadedServerInterface {
     ServerThreadPool *pool;
 
     std::map<key_pair_t, int> db;
+    std::mutex dbLock;
 
    public:
     void seedDB() {
@@ -44,32 +45,36 @@ class MockDatabase : public MultiThreadedServerInterface {
     }
     void controller(int nsd) {
         RequestType type;
-        read(nsd, &type, sizeof(type));
+        loop_read(nsd, &type, sizeof(type));
 
         int responseDelay = config["response-delay"].as<int>();
 
         if (type == RequestType::GET) {
+            usleep(responseDelay * 1000);
+            std::lock_guard<std::mutex> guard(dbLock);
             GetRequest request;
-            read(nsd, &request, sizeof(request));
+            loop_read(nsd, &request, sizeof(request));
             auto key_pair =
                 make_pair(std::string(request.container), request.key);
             GetResponse response;
             response.value = db.count(key_pair) ? db[key_pair] : -1;
-            usleep(responseDelay * 1000);
-            write(nsd, &response, sizeof(response));
+            loop_write(nsd, &response, sizeof(response));
         } else if (type == RequestType::PUT) {
+            std::lock_guard<std::mutex> guard(dbLock);
             PutRequest request;
-            read(nsd, &request, sizeof(request));
+            loop_read(nsd, &request, sizeof(request));
             auto key_pair =
                 make_pair(std::string(request.container), request.key);
             db[key_pair] = request.value;
         } else if (type == RequestType::ERASE) {
+            std::lock_guard<std::mutex> guard(dbLock);
             EraseRequest request;
-            read(nsd, &request, sizeof(request));
+            loop_read(nsd, &request, sizeof(request));
             auto key_pair =
                 make_pair(std::string(request.container), request.key);
             db.erase(key_pair);
         } else if (type == RequestType::RESET) {
+            std::lock_guard<std::mutex> guard(dbLock);
             db.clear();
         } else {
             std::cout << "Unknown Request: " << static_cast<int>(type)
@@ -80,7 +85,7 @@ class MockDatabase : public MultiThreadedServerInterface {
     void start() {
         int port = config["db-port"].as<int>();
         std::string ip = config["db-ip"].as<std::string>();
-        pool = new ServerThreadPool(this, ip, port);
+        pool = new ServerThreadPool(this, ip, port, 20, 40);
         pool->start();
     }
 

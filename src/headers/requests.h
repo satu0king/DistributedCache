@@ -4,8 +4,10 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <string>
 
 struct GetRequest {
@@ -32,12 +34,22 @@ struct PutRequest {
     int value;
 };
 
-enum class RequestType { GET, PUT, ERASE, RESET, CREATECONTAINER, GOSSIP, GET_TARGET, PUT_TARGET };
+enum class RequestType {
+    GET,
+    PUT,
+    ERASE,
+    RESET,
+    CREATECONTAINER,
+    GOSSIP,
+    GET_TARGET,
+    PUT_TARGET
+};
 
 struct Address {
     std::string ip;
     int port;
-    Address(const std::string ip = "invalid", const int port = -1) : ip(ip), port(port){};
+    Address(const std::string ip = "invalid", const int port = -1)
+        : ip(ip), port(port){};
     bool operator==(const Address& other) {
         return ip == other.ip && port == other.port;
     }
@@ -62,7 +74,6 @@ struct Address {
 
         return sd;
     }
-
 };
 
 /* A simple routine calling UNIX write() in a loop */
@@ -70,7 +81,10 @@ static ssize_t loop_write(int fd, const void* data, size_t size) {
     ssize_t ret = 0;
     while (size > 0) {
         ssize_t r;
-        if ((r = write(fd, data, size)) < 0) return r;
+        if ((r = write(fd, data, size)) < 0) {
+            perror("write");
+            return r;
+        }
         if (r == 0) break;
         ret += r;
         data = (const char*)data + r;
@@ -84,7 +98,10 @@ static ssize_t loop_read(int fd, void* data, size_t size) {
     ssize_t ret = 0;
     while (size > 0) {
         ssize_t r;
-        if ((r = read(fd, data, size)) < 0) return r;
+        if ((r = read(fd, data, size)) < 0) {
+            perror("read");
+            return r;
+        }
         if (r == 0) break;
         ret += r;
         data = (char*)data + r;

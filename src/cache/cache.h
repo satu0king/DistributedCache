@@ -3,9 +3,12 @@
 #include "cache_policy_interface.h"
 #include "data_connector_interface.h"
 
+#include <thread>
+
 class Cache {
     CachePolicyInterface *cache;
     DataConnectorInterface *DB;
+    std::mutex cacheLock;
 
    public:
     Cache(CachePolicyInterface *cache, DataConnectorInterface *DB)

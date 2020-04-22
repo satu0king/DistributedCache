@@ -85,6 +85,10 @@ class ServerThreadPool {
                 pthread_cond_wait(&c_prod, &queueLock);
             }
 
+            if(connectionQueue.size() >= 5) {
+                std::cout << "Queue Size: " << connectionQueue.size() << std::endl;
+            }
+
             connectionQueue.push(nsd);
             pthread_mutex_unlock(&queueLock);
             pthread_cond_signal(&c_cons);
@@ -92,8 +96,9 @@ class ServerThreadPool {
     }
 
     void stop() {
-        for(int i = 0; i < threadCount; i++)
+        for(int i = 0; i < threadCount; i++) {
             pthread_cancel(threads[i]);
+        }
     }
 
     friend void* threadHandler(void* _pool);

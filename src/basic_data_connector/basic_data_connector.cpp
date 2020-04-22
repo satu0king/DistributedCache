@@ -31,13 +31,13 @@ int BasicDataConnector::getConnection() {
 int BasicDataConnector::get(std::string container, int key) {
     int sd = getConnection();
     RequestType type = RequestType::GET;
-    write(sd, &type, sizeof(type));
+    loop_write(sd, &type, sizeof(type));
     GetRequest request = {.key = key};
     strcpy(request.container, container.c_str());
-    write(sd, &request, sizeof(request));
+    loop_write(sd, &request, sizeof(request));
 
     GetResponse response;
-    read(sd, &response, sizeof(response));
+    loop_read(sd, &response, sizeof(response));
     close(sd);
     return response.value;
 }
@@ -45,36 +45,36 @@ int BasicDataConnector::get(std::string container, int key) {
 void BasicDataConnector::reset() {
     int sd = getConnection();
     RequestType type = RequestType::RESET;
-    write(sd, &type, sizeof(type));
+    loop_write(sd, &type, sizeof(type));
     close(sd);
 }
 
 void BasicDataConnector::put(std::string container, int key, int value) {
     int sd = getConnection();
     RequestType type = RequestType::PUT;
-    write(sd, &type, sizeof(type));
+    loop_write(sd, &type, sizeof(type));
     PutRequest request = {.key = key, .value = value};
     strcpy(request.container, container.c_str());
-    write(sd, &request, sizeof(request));
+    loop_write(sd, &request, sizeof(request));
     close(sd);
 }
 
 void BasicDataConnector::erase(std::string container, int key) {
     int sd = getConnection();
     RequestType type = RequestType::ERASE;
-    write(sd, &type, sizeof(type));
+    loop_write(sd, &type, sizeof(type));
     EraseRequest request = {.key = key};
     strcpy(request.container, container.c_str());
-    write(sd, &request, sizeof(request));
+    loop_write(sd, &request, sizeof(request));
     close(sd);
 }
 
 void BasicDataConnector::createContainer(std::string container) {
      int sd = getConnection();
     RequestType type = RequestType::CREATECONTAINER;
-    write(sd, &type, sizeof(type));
+    loop_write(sd, &type, sizeof(type));
     EraseRequest request;
     strcpy(request.container, container.c_str());
-    write(sd, &request, sizeof(request));
+    loop_write(sd, &request, sizeof(request));
     close(sd);
 }
