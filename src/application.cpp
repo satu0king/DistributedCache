@@ -91,6 +91,7 @@ class WorkerPool {
         std::lock_guard<std::mutex> guard(queueLock);
         queue.push(obj);
     }
+
     void insert(std::vector<T> &objects) {
         std::lock_guard<std::mutex> guard(queueLock);
         for (auto &obj : objects) queue.push(obj);
@@ -146,7 +147,7 @@ int main(int ac, char *av[]) {
     std::vector<DataConnectorInterface *> caches;
     caches.push_back(new BasicDataConnector(cache_ip, 6666));
     for (int port = 7001; port <= 7019; port++) {
-        // caches.push_back(new BasicDataConnector(cache_ip, port));
+        caches.push_back(new BasicDataConnector(cache_ip, port));
     }
 
     db->reset();
@@ -156,7 +157,6 @@ int main(int ac, char *av[]) {
 
     int n = 1000;
     std::cout << "Seeding Database" << std::endl;
-
     vector<int> values(n);
 
     using milli = std::chrono::milliseconds;
@@ -171,7 +171,7 @@ int main(int ac, char *av[]) {
 
     float probability = 0.5;
 
-    int q = 1000;
+    int q = 5000;
 
     vector<int> random(100);
 
