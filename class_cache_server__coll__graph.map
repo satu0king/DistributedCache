@@ -1,0 +1,13 @@
+<map id="CacheServer" name="CacheServer">
+<area shape="rect" id="node1" title=" " alt="" coords="300,983,416,1133"/>
+<area shape="rect" id="node2" href="$class_multi_threaded_server_interface.html" title=" " alt="" coords="5,365,199,443"/>
+<area shape="rect" id="node11" href="$class_server_thread_pool.html" title=" " alt="" coords="125,652,271,905"/>
+<area shape="rect" id="node3" href="$class_cache_policy_interface.html" title=" " alt="" coords="235,314,406,494"/>
+<area shape="rect" id="node10" href="$class_cache.html" title=" " alt="" coords="385,696,478,861"/>
+<area shape="rect" id="node4" href="$class_data_connector_interface.html" title=" " alt="" coords="432,329,617,479"/>
+<area shape="rect" id="node5" href="$class_member_node.html" title=" " alt="" coords="611,637,790,920"/>
+<area shape="rect" id="node6" href="$struct_member.html" title=" " alt="" coords="647,321,743,487"/>
+<area shape="rect" id="node7" href="$struct_address.html" title=" " alt="" coords="618,5,765,171"/>
+<area shape="rect" id="node8" href="$class_membership_list.html" title=" " alt="" coords="772,233,917,575"/>
+<area shape="rect" id="node9" href="$class_gossip_artifact.html" title=" " alt="" coords="789,20,913,156"/>
+</map>

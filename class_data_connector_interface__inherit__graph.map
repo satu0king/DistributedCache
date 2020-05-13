@@ -1,0 +1,5 @@
+<map id="DataConnectorInterface" name="DataConnectorInterface">
+<area shape="rect" id="node1" title=" " alt="" coords="91,5,277,156"/>
+<area shape="rect" id="node2" href="$class_basic_data_connector.html" title=" " alt="" coords="5,241,165,421"/>
+<area shape="rect" id="node3" href="$class_postgres_data_connector.html" title=" " alt="" coords="189,204,376,457"/>
+</map>

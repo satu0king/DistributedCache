@@ -1,0 +1,5 @@
+<map id="killServer" name="killServer">
+<area shape="rect" id="node1" title=" " alt="" coords="5,5,81,32"/>
+<area shape="rect" id="node2" href="$class_mock_database.html#a6690b3b48e327e2c73ca863ed64e7e00" title=" " alt="" coords="129,5,260,32"/>
+<area shape="rect" id="node3" href="$class_server_thread_pool.html#a7558ceb26c59452ab596cd4a268ef5a7" title=" " alt="" coords="308,5,465,32"/>
+</map>
