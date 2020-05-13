@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 #include <unordered_map>
+#include <thread>
 
 #include "buffer.h"
 #include "gossip_artifact.h"
@@ -17,10 +18,10 @@
 class MemberNode {
     Member myMember;
     MembershipList memberList;
-    pthread_t tid;
+    std::thread tid;
 
     std::unordered_map<std::string, GossipArtifact*> gossipArtifacts;
-    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    std::mutex lock;
 
    public:
     MembershipList getList();
@@ -37,7 +38,7 @@ class MemberNode {
 
     void loop();
 
-    int sendMemberList(Member& member, Buffer data);
+    int sendMemberList(Member& member, Buffer &data);
 
     void receiveGossip(int connection);
 
@@ -45,6 +46,5 @@ class MemberNode {
 
     Address getNearestNode(int key);
     Address getAddress() { return myMember.address; }
+    void threadLoop();
 };
-
-void* memberloop(void* ptr);

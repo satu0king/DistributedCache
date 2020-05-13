@@ -1,6 +1,5 @@
 #include <fcntl.h>
 #include <netinet/in.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +21,7 @@
 #include "requests.h"
 #include "server_interface.h"
 #include "server_thread_pool.h"
+
 
 namespace po = boost::program_options;
 
@@ -117,86 +117,88 @@ class CacheServer : public MultiThreadedServerInterface {
 
     void controller(int nsd) {
         RequestType type;
-        int bytes_read = loop_read(nsd, &type, sizeof(type));
-        // if (bytes_read != sizeof(type)) {
-        //     std::cout << bytes_read << std::endl;
-        //     perror("read()");
-        //     return;
-        // }
-        assert(bytes_read == sizeof(type));
 
-        int responseDelay = config["response-delay"].as<int>();
+        try {
+            loop_read(nsd, &type, sizeof(type));
 
-        auto address = member->getAddress();
+            int responseDelay = config["response-delay"].as<int>();
 
-        if (type == RequestType::GET) {
-            GetRequest request;
-            read(nsd, &request, sizeof(request));
-            // std::cout << address.toString() << " GET " << request.key <<
-            // std::endl;
-            Address targetNode = member->getNearestNode(
-                request.key);  // Get Target node from consistent ring
+            auto address = member->getAddress();
 
-            if (targetNode == address) {
+            if (type == RequestType::GET) {
+                GetRequest request;
+                read(nsd, &request, sizeof(request));
+                // std::cout << address.toString() << " GET " << request.key <<
+                // std::endl;
+                Address targetNode = member->getNearestNode(
+                    request.key);  // Get Target node from consistent ring
+
+                if (targetNode == address) {
+                    GetResponse response;
+                    response.value =
+                        getCache()->getEntry(request.container, request.key);
+                    usleep(responseDelay * 1000);
+                    write(nsd, &response, sizeof(response));
+                    return;
+                }
+
+                int connection = Address::getConnection(targetNode);
+                if (connection == -1) {
+                    perror("Connection to Target Node Failed");
+                    return;
+                }
+                RequestType type = RequestType::GET_TARGET;  // Forward request
+                loop_write(connection, &type, sizeof(type));
+                loop_write(connection, &request, sizeof(request));
+
+                GetResponse response;  // Get response
+                read(connection, &response, sizeof(response));
+                close(connection);
+
+                write(nsd, &response, sizeof(response));  // Return Response
+            } else if (type == RequestType::PUT) {
+                PutRequest request;
+                read(nsd, &request, sizeof(request));
+                Address targetNode = member->getNearestNode(request.key);
+                std::cout << address.toString() << " PUT " << request.key << " "
+                          << request.value << std::endl;
+                int connection = Address::getConnection(targetNode);
+                if (connection == -1) {
+                    perror("Connection to Target Node Failed");
+                    return;
+                }
+                RequestType type = RequestType::PUT_TARGET;
+                loop_write(connection, &type, sizeof(type));
+                loop_write(connection, &request, sizeof(request));
+                close(connection);
+            } else if (type == RequestType::GET_TARGET) {
+                GetRequest request;
+                read(nsd, &request, sizeof(request));
+                // std::cout << address.toString() << " GET_TARGET " <<
+                // request.key
+                // << std::endl;
                 GetResponse response;
                 response.value =
                     getCache()->getEntry(request.container, request.key);
                 usleep(responseDelay * 1000);
                 write(nsd, &response, sizeof(response));
-                return;
+            } else if (type == RequestType::PUT_TARGET) {
+                PutRequest request;
+                read(nsd, &request, sizeof(request));
+                std::cout << address.toString() << " PUT_TARGET " << request.key
+                          << " " << request.value << std::endl;
+                getCache()->insert(request.container, request.key,
+                                   request.value);
+            } else if (type == RequestType::RESET) {
+                getCache()->reset();
+            } else if (type == RequestType::GOSSIP) {
+                member->receiveGossip(nsd);
+            } else {
+                throw std::runtime_error("Unknown request type");
             }
-
-            int connection = Address::getConnection(targetNode);
-            if (connection == -1) {
-                perror("Connection to Target Node Failed");
-                return;
-            }
-            RequestType type = RequestType::GET_TARGET;  // Forward request
-            loop_write(connection, &type, sizeof(type));
-            loop_write(connection, &request, sizeof(request));
-
-            GetResponse response;  // Get response
-            read(connection, &response, sizeof(response));
-            close(connection);
-
-            write(nsd, &response, sizeof(response));  // Return Response
-        } else if (type == RequestType::PUT) {
-            PutRequest request;
-            read(nsd, &request, sizeof(request));
-            Address targetNode = member->getNearestNode(request.key);
-            std::cout << address.toString() << " PUT " << request.key << " "
-                      << request.value << std::endl;
-            int connection = Address::getConnection(targetNode);
-            if (connection == -1) {
-                perror("Connection to Target Node Failed");
-                return;
-            }
-            RequestType type = RequestType::PUT_TARGET;
-            loop_write(connection, &type, sizeof(type));
-            loop_write(connection, &request, sizeof(request));
-            close(connection);
-        } else if (type == RequestType::GET_TARGET) {
-            GetRequest request;
-            read(nsd, &request, sizeof(request));
-            // std::cout << address.toString() << " GET_TARGET " << request.key
-            // << std::endl;
-            GetResponse response;
-            response.value =
-                getCache()->getEntry(request.container, request.key);
-            usleep(responseDelay * 1000);
-            write(nsd, &response, sizeof(response));
-        } else if (type == RequestType::PUT_TARGET) {
-            PutRequest request;
-            read(nsd, &request, sizeof(request));
-            std::cout << address.toString() << " PUT_TARGET " << request.key
-                      << " " << request.value << std::endl;
-            getCache()->insert(request.container, request.key, request.value);
-        } else if (type == RequestType::RESET) {
-            getCache()->reset();
-        } else if (type == RequestType::GOSSIP) {
-            member->receiveGossip(nsd);
-        } else {
-            perror("Unknown Request");
+        }
+        catch (const std::exception &e) {
+            std::cerr << "error: " << e.what() << "\n";
         }
     }
 

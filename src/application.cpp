@@ -113,7 +113,9 @@ class WorkerPool {
                 if (queue.empty()) {
                     return;
                 }
-                if (queue.size() % 100 == 0) std::cout << queue.size() << endl;
+                if (queue.size() % 100 == 0)
+                    ;
+                std::cout << queue.size() << endl;
                 obj = queue.front();
                 queue.pop();
                 // queueLock.unlock();
@@ -131,6 +133,8 @@ class WorkerPool {
 int main(int ac, char *av[]) {
     initConfig(ac, av);
     srand(time(NULL));
+
+    std::cout << "Starting Tests" << std::endl;
 
     int db_port = config["db-port"].as<int>();
     std::string db_ip = config["db-ip"].as<std::string>();
@@ -213,7 +217,9 @@ int main(int ac, char *av[]) {
     workerPool.join();
     auto finish = std::chrono::high_resolution_clock::now();
 
-    auto time = std::chrono::duration_cast<milli>(finish - start).count();
+    auto time =
+        std::chrono::duration_cast<std::chrono::milliseconds>(finish - start)
+            .count();
     std::cout << "Total Time : " << time << std::endl;
 
     for (int i = 0; i < q; i++) {

@@ -7,8 +7,8 @@
 #include "gossip_artifact.h"
 #include "requests.h"
 
-#define T_FAIL 8
-#define T_REMOVE 16
+#define T_FAIL 80
+#define T_REMOVE 160
 #define RING_SIZE 1021
 
 struct MemberSerialized {

@@ -1,10 +1,22 @@
 
 #include "member_node.h"
 
+
+#define TIMECHECK(x, message, limit)                                                         \
+                                                                            \
+        auto start_##message = std::chrono::high_resolution_clock::now();              \
+        x;                                                                   \
+        auto finish_##message = std::chrono::high_resolution_clock::now();             \
+        auto time_##message = std::chrono::duration_cast<std::chrono::milliseconds>(   \
+                        finish_##message - start_##message)                                      \
+                        .count();                                            \
+        if (time_##message > limit)                                                       \
+            std::cout << "Time taken to run " << #message << " " << time_##message << std::endl;                                  \
+    
+
 MembershipList MemberNode::getList() {
-    pthread_mutex_lock(&lock);
+    std::lock_guard guard(lock);
     MembershipList list = memberList;
-    pthread_mutex_unlock(&lock);
     return list;
 }
 
@@ -34,17 +46,17 @@ MemberNode::MemberNode(Address myAddress, int startRange)
     : myMember(myAddress, startRange) {
     memberList.addMember(myMember);
     registerArtifact(memberList);
-    pthread_create(&tid, NULL, &memberloop, this);
+    tid = std::thread(&MemberNode::threadLoop, this);
 };
 
 int MemberNode::heartbeat() { return myMember.heartbeat; }
 
 void MemberNode::loop() {
+    TIMECHECK(std::unique_lock unique_lock(lock), lock_time, 0);
+
     myMember.heartbeat++;
     myMember.timestamp++;
     int timestamp = heartbeat();
-
-    pthread_mutex_lock(&lock);
 
     for (auto& [key, artifact] : gossipArtifacts) artifact->loop(timestamp);
 
@@ -55,24 +67,38 @@ void MemberNode::loop() {
 
     std::vector<int> sendList = selectKItems(
         memberList.size(), std::min(GOSSIP_K, (int)memberList.size()));
+        
     auto data = generateGossipPayload();
-    pthread_mutex_unlock(&lock);
-    // std::cout << "IN" << " " << timestamp << std::endl;
-    for (int i : sendList) sendMemberList(memberList[i], data);
-    // std::cout << "OUT" << std::endl;
+    unique_lock.unlock();
+
+    for (int i : sendList) {
+        TIMECHECK(sendMemberList(memberList[i], data), send_gossip, 0);
+    }
 }
 
-int MemberNode::sendMemberList(Member& member, Buffer data) {
+int MemberNode::sendMemberList(Member& member, Buffer& data) {
     if (member.address == myMember.address) return 0;
-    int connection = Address::getConnection(member.address);
+    TIMECHECK(int connection = Address::getConnection(member.address), Connection_Acquire_Time, 0);
     if (connection == -1) {
-        std::cout << "connection drop" << std::endl;
+        std::cout << "connection drop to " << (std::string)member.address
+                  << std::endl;
         return -1;
     }
+
+    auto start = std::chrono::high_resolution_clock::now();
     RequestType type = RequestType::GOSSIP;
     loop_write(connection, &type, sizeof(type));
     loop_write(connection, data.data(), data.size());
     close(connection);
+    auto finish = std::chrono::high_resolution_clock::now();
+
+    auto time =
+        std::chrono::duration_cast<std::chrono::milliseconds>(finish - start)
+            .count();
+    if (time)
+        std::cout << "Time taken to " << member.address.toString() << " "
+                  << time << std::endl;
+
     return 0;
 }
 
@@ -93,16 +119,14 @@ void MemberNode::receiveGossip(int connection) {
         read_bytes = loop_read(connection, data.data(), header.size);
         assert(read_bytes == header.size);
 
-        pthread_mutex_lock(&lock);
+        std::lock_guard guard(lock);
         gossipArtifacts[type]->update(data);
-        pthread_mutex_unlock(&lock);
     }
 }
 
 Address MemberNode::getNearestNode(int key) {
-    pthread_mutex_lock(&lock);
+    std::lock_guard guard(lock);
     auto v = memberList.getNearestNode(key);
-    pthread_mutex_unlock(&lock);
     return v;
 }
 std::vector<int> MemberNode::selectKItems(int n, int k) {
@@ -117,15 +141,16 @@ std::vector<int> MemberNode::selectKItems(int n, int k) {
     return reservoir;
 }
 
-void* memberloop(void* ptr) {
+void MemberNode::threadLoop() {
     usleep(500 * 1000);
     srand(time(NULL));
-    MemberNode* node = (MemberNode*)ptr;
-    while (1) {
-        // std::cout << node->heartbeat() << std::endl;
-        node->loop();
+
+    int run_times = 50;
+    while (run_times--) {
+        TIMECHECK(loop(), main_loop, 10000);
+
         usleep(HEARTBEAT_PERIOD * 1000);
     }
 
-    return NULL;
+    std::cout << "OVER\n";
 }

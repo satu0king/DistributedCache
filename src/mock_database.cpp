@@ -6,7 +6,6 @@ namespace po = boost::program_options;
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,13 +14,13 @@ namespace po = boost::program_options;
 #include <unistd.h>
 
 #include <iostream>
+#include <thread>
 #include <unordered_map>
 
 #include "headers/requests.h"
 #include "headers/types.h"
 #include "multithreaded_server/server_interface.h"
 #include "multithreaded_server/server_thread_pool.h"
-
 
 po::variables_map config;
 
@@ -51,30 +50,35 @@ class MockDatabase : public MultiThreadedServerInterface {
 
         if (type == RequestType::GET) {
             usleep(responseDelay * 1000);
-            std::lock_guard<std::mutex> guard(dbLock);
             GetRequest request;
             loop_read(nsd, &request, sizeof(request));
             auto key_pair =
                 make_pair(std::string(request.container), request.key);
             GetResponse response;
-            response.value = db.count(key_pair) ? db[key_pair] : -1;
+            {
+                //std::lock_guard<std::mutex> guard(dbLock);
+                response.value = db.count(key_pair) ? db[key_pair] : -1;
+            }
             loop_write(nsd, &response, sizeof(response));
         } else if (type == RequestType::PUT) {
-            std::lock_guard<std::mutex> guard(dbLock);
             PutRequest request;
             loop_read(nsd, &request, sizeof(request));
             auto key_pair =
                 make_pair(std::string(request.container), request.key);
-            db[key_pair] = request.value;
+            {
+                //std::lock_guard<std::mutex> guard(dbLock);
+                db[key_pair] = request.value;
+            }
+
         } else if (type == RequestType::ERASE) {
-            std::lock_guard<std::mutex> guard(dbLock);
             EraseRequest request;
             loop_read(nsd, &request, sizeof(request));
             auto key_pair =
                 make_pair(std::string(request.container), request.key);
+            //std::lock_guard<std::mutex> guard(dbLock);
             db.erase(key_pair);
         } else if (type == RequestType::RESET) {
-            std::lock_guard<std::mutex> guard(dbLock);
+            //std::lock_guard<std::mutex> guard(dbLock);
             db.clear();
         } else {
             std::cout << "Unknown Request: " << static_cast<int>(type)
@@ -85,7 +89,7 @@ class MockDatabase : public MultiThreadedServerInterface {
     void start() {
         int port = config["db-port"].as<int>();
         std::string ip = config["db-ip"].as<std::string>();
-        pool = new ServerThreadPool(this, ip, port, 20, 40);
+        pool = new ServerThreadPool(this, ip, port, 10, 20);
         pool->start();
     }
 
@@ -108,7 +112,6 @@ void handle_my(int sig) {
             break;
     }
 }
-
 
 void initConfig(int ac, char *av[]) {
     try {
@@ -140,7 +143,6 @@ void initConfig(int ac, char *av[]) {
         killServer(EXIT_FAILURE);
     }
 }
-
 
 int main(int ac, char *av[]) {
     initConfig(ac, av);

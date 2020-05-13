@@ -3,7 +3,6 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
-#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,8 +10,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <mutex>
 #include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "server_interface.h"
@@ -22,25 +23,24 @@ void* threadHandler(void* _pool);
 
 class ServerThreadPool {
     std::queue<int> connectionQueue;
-    pthread_mutex_t queueLock = PTHREAD_MUTEX_INITIALIZER;
-    pthread_cond_t c_cons = PTHREAD_COND_INITIALIZER;
-    pthread_cond_t c_prod = PTHREAD_COND_INITIALIZER;
+    std::mutex queueLock;
+    std::condition_variable c_cons;
+    std::condition_variable c_prod;
     int port;
     std::string ip;
     int threadCount;
     MultiThreadedServerInterface* server;
-    std::vector<pthread_t> threads;
+    std::vector<std::thread> threads;
     int socketConnection;
     int queueCapacity;
 
    public:
     ServerThreadPool(MultiThreadedServerInterface* server, std::string ip,
-                     int port, int threadCount = 10, int queueCapacity = 20)
+                     int port, int threadCount = 30, int queueCapacity = 20)
         : ip(ip),
           port(port),
           threadCount(threadCount),
           server(server),
-          threads(threadCount),
           queueCapacity(queueCapacity) {}
 
     void start() {
@@ -63,66 +63,57 @@ class ServerThreadPool {
         if (bind(socketConnection, (struct sockaddr*)&server, sizeof(server)) <
             0) {
             perror("bind failed");
-            exit(EXIT_FAILURE);
+            throw std::runtime_error("bind failed");
         }
 
-        for (int i = 0; i < threadCount; i++) {
-            if (pthread_create(&threads[i], NULL, threadHandler, this) < 0) {
-                perror("pthread_create()");
-                exit(EXIT_FAILURE);
-            }
-        }
+        for (int i = 0; i < threadCount; i++)
+            threads.push_back(
+                std::thread(&ServerThreadPool::threadHandler, this));
 
-        listen(socketConnection, 10);
+        listen(socketConnection, 30);
 
         while (1) {
             int nsd =
                 accept(socketConnection, (struct sockaddr*)&client, &clientLen);
-            pthread_mutex_lock(&queueLock);
+
+            std::unique_lock lock(queueLock);
 
             while (connectionQueue.size() >= queueCapacity) {
                 std::cout << "Queue Full";
-                pthread_cond_wait(&c_prod, &queueLock);
+                c_prod.wait(lock);
             }
 
-            if(connectionQueue.size() >= 5) {
-                std::cout << "Queue Size: " << connectionQueue.size() << std::endl;
+            if (connectionQueue.size() >= 5) {
+                std::cout << "Queue Size: " << connectionQueue.size()
+                          << std::endl;
             }
 
             connectionQueue.push(nsd);
-            pthread_mutex_unlock(&queueLock);
-            pthread_cond_signal(&c_cons);
+            lock.unlock();
+            c_cons.notify_one();
         }
     }
 
     void stop() {
-        for(int i = 0; i < threadCount; i++) {
-            pthread_cancel(threads[i]);
+        for (int i = 0; i < threadCount; i++) {
+            // pthread_cancel(threads[i]);
         }
     }
 
-    friend void* threadHandler(void* _pool);
-};
+    void threadHandler() {
+        while (1) {
+            std::unique_lock lock(queueLock);
 
-void* threadHandler(void* _pool) {
-    ServerThreadPool* pool = (ServerThreadPool*)_pool;
-    MultiThreadedServerInterface* server = pool->server;
+            while (connectionQueue.empty()) c_cons.wait(lock);
 
-    while (1) {
-        pthread_mutex_lock(&pool->queueLock);
+            int connection = connectionQueue.front();
+            connectionQueue.pop();
 
-        while (pool->connectionQueue.empty())
-            pthread_cond_wait(
-                &pool->c_cons,
-                &pool->queueLock);  // Wait for new message to deliver
+            lock.unlock();
+            c_prod.notify_one();
 
-        int connection = pool->connectionQueue.front();
-        pool->connectionQueue.pop();
-
-        pthread_mutex_unlock(&pool->queueLock);
-        pthread_cond_signal(&pool->c_prod);
-
-        server->controller(connection);
-        close(connection);
+            server->controller(connection);
+            close(connection);
+        }
     }
-}
+};
